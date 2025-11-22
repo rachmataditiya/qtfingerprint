@@ -9,6 +9,9 @@ int main(int argc, char *argv[])
     g_log_set_always_fatal((GLogLevelFlags)G_LOG_LEVEL_ERROR);
 
     QApplication app(argc, argv);
+    app.setOrganizationName("Arkana");
+    app.setOrganizationDomain("arkana.co.id");
+    app.setApplicationName("FingerprintApp");
     
     qInfo() << "=================================================";
     qInfo() << "U.are.U 4500 Fingerprint Application";

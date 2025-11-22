@@ -7,6 +7,9 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QDebug>
+#include <QStandardPaths>
+#include <QDir>
+#include <QCoreApplication>
 
 DatabaseConfigDialog::DatabaseConfigDialog(QWidget *parent)
     : QDialog(parent)
@@ -23,6 +26,12 @@ DatabaseConfigDialog::DatabaseConfigDialog(QWidget *parent)
         m_nameEdit->setText(cfg.name);
         m_userEdit->setText(cfg.user);
         m_passEdit->setText(cfg.password);
+    } else {
+        // Set default secure path for SQLite
+        QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QDir dir(dataPath);
+        if (!dir.exists()) dir.mkpath(".");
+        m_nameEdit->setText(dir.filePath("fingerprint.db"));
     }
     
     onTypeChanged(m_typeCombo->currentText());
@@ -45,7 +54,7 @@ void DatabaseConfigDialog::setupUI()
     formLayout->addRow("Port:", m_portEdit);
     
     QHBoxLayout* nameLayout = new QHBoxLayout();
-    m_nameEdit = new QLineEdit("fingerprint.db");
+    m_nameEdit = new QLineEdit(); // Empty initially, set in constructor
     m_browseBtn = new QPushButton("Browse...");
     connect(m_browseBtn, &QPushButton::clicked, this, &DatabaseConfigDialog::onBrowseClicked);
     nameLayout->addWidget(m_nameEdit);
@@ -88,8 +97,10 @@ void DatabaseConfigDialog::onTypeChanged(const QString& type)
     m_browseBtn->setVisible(isSqlite);
     
     if (isSqlite) {
-        if (m_nameEdit->text().isEmpty() || !m_nameEdit->text().endsWith(".db")) {
-            m_nameEdit->setText("fingerprint.db");
+        // If current text is empty or doesn't look like a path, set default
+        if (m_nameEdit->text().isEmpty() || (!m_nameEdit->text().contains("/") && !m_nameEdit->text().contains("\\"))) {
+             QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+             m_nameEdit->setText(QDir(dataPath).filePath("fingerprint.db"));
         }
     }
 }

@@ -5,6 +5,8 @@
 #include <QVariant>
 #include <QDateTime>
 #include <QDebug>
+#include <QFileInfo>
+#include <QDir>
 
 DatabaseManager::DatabaseManager(QObject* parent)
     : QObject(parent)
@@ -24,6 +26,16 @@ bool DatabaseManager::initialize(const DatabaseConfigDialog::Config& config)
         m_db = QSqlDatabase::database("qt_sql_default_connection");
     } else {
         if (config.type == "SQLITE") {
+            // Ensure directory exists
+            QFileInfo fi(config.name);
+            QDir dir = fi.absoluteDir();
+            if (!dir.exists()) {
+                if (!dir.mkpath(".")) {
+                    setError(QString("Failed to create database directory: %1").arg(dir.path()));
+                    return false;
+                }
+            }
+            
             m_db = QSqlDatabase::addDatabase("QSQLITE");
             m_db.setDatabaseName(config.name);
         } else {
