@@ -1,4 +1,5 @@
 #include "mainwindow_app.h"
+#include "database_config_dialog.h"
 #include <QApplication>
 #include <QMessageBox>
 #include <QDateTime>
@@ -14,7 +15,7 @@
 MainWindowApp::MainWindowApp(QWidget *parent)
     : QMainWindow(parent)
     , m_fpManager(new FingerprintManager())
-    , m_dbManager(new DatabaseManager("fingerprint.db", this))
+    , m_dbManager(new DatabaseManager(this))
     , m_enrollmentInProgress(false)
     , m_enrollmentSampleCount(0)
 {
@@ -34,11 +35,37 @@ MainWindowApp::MainWindowApp(QWidget *parent)
     // Connect watcher
     connect(&m_enrollWatcher, &QFutureWatcher<int>::finished, this, &MainWindowApp::onCaptureEnrollFinished);
 
-    // Initialize database
-    if (!m_dbManager->initialize()) {
+    // Initialize database with configuration dialog
+    if (!DatabaseConfigDialog::hasConfig()) {
+        DatabaseConfigDialog dlg(this);
+        if (dlg.exec() != QDialog::Accepted) {
+            QMessageBox::warning(this, "Configuration", "Database configuration required. Exiting.");
+            // We can't easily exit here in constructor without showing window first or using timer.
+            // But we can disable functionality or close in showEvent.
+            // For now, just let it be uninitialized and buttons disabled.
+            updateStatus("Database not configured", true);
+            return;
+        }
+    }
+    
+    DatabaseConfigDialog::Config dbConfig = DatabaseConfigDialog::loadConfig();
+    if (!m_dbManager->initialize(dbConfig)) {
         QMessageBox::critical(this, "Database Error", 
             QString("Failed to initialize database: %1").arg(m_dbManager->getLastError()));
+        
+        // Offer to reconfigure
+        if (QMessageBox::question(this, "Retry?", "Would you like to reconfigure database?") == QMessageBox::Yes) {
+             DatabaseConfigDialog dlg(this);
+             if (dlg.exec() == QDialog::Accepted) {
+                 dbConfig = DatabaseConfigDialog::loadConfig();
+                 if (m_dbManager->initialize(dbConfig)) {
+                     goto db_success;
+                 }
+             }
+        }
+        updateStatus("Database initialization failed", true);
     } else {
+db_success:
         log("Database initialized successfully");
         qDebug() << "Calling updateUserList()...";
         updateUserList();

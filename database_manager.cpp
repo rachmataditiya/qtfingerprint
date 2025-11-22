@@ -1,13 +1,13 @@
 #include "database_manager.h"
+#include "migration_manager.h"
 #include <QSqlError>
 #include <QSqlRecord>
 #include <QVariant>
 #include <QDateTime>
 #include <QDebug>
 
-DatabaseManager::DatabaseManager(const QString& dbPath, QObject* parent)
+DatabaseManager::DatabaseManager(QObject* parent)
     : QObject(parent)
-    , m_dbPath(dbPath)
 {
 }
 
@@ -18,59 +18,47 @@ DatabaseManager::~DatabaseManager()
     }
 }
 
-bool DatabaseManager::initialize()
+bool DatabaseManager::initialize(const DatabaseConfigDialog::Config& config)
 {
-    m_db = QSqlDatabase::addDatabase("QSQLITE");
-    m_db.setDatabaseName(m_dbPath);
+    if (QSqlDatabase::contains("qt_sql_default_connection")) {
+        m_db = QSqlDatabase::database("qt_sql_default_connection");
+    } else {
+        if (config.type == "SQLITE") {
+            m_db = QSqlDatabase::addDatabase("QSQLITE");
+            m_db.setDatabaseName(config.name);
+        } else {
+            m_db = QSqlDatabase::addDatabase("QPSQL");
+            m_db.setHostName(config.host);
+            m_db.setPort(config.port);
+            m_db.setDatabaseName(config.name);
+            m_db.setUserName(config.user);
+            m_db.setPassword(config.password);
+        }
+    }
 
     if (!m_db.open()) {
         setError(QString("Failed to open database: %1").arg(m_db.lastError().text()));
         return false;
     }
 
-    if (!createTables()) {
+    // Run Migrations
+    QString migrationDir = (config.type == "SQLITE") ? ":/migrations/sqlite" : "migrations/postgresql";
+    // Note: Postgres migrations are not in qrc yet, but user only gave structure.
+    // For now assume sqlite is primary or folder exists if using postgres.
+    
+    MigrationManager migrator(m_db, migrationDir);
+    if (!migrator.migrate()) {
+        setError(QString("Migration failed: %1").arg(migrator.getLastError()));
         return false;
     }
 
-    qDebug() << "Database initialized successfully:" << m_dbPath;
+    qDebug() << "Database initialized successfully";
     return true;
 }
 
 bool DatabaseManager::isOpen() const
 {
     return m_db.isOpen();
-}
-
-bool DatabaseManager::createTables()
-{
-    QSqlQuery query(m_db);
-
-    // Create users table
-    QString createUsersTable = R"(
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            email TEXT,
-            fingerprint_template BLOB NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    )";
-
-    if (!query.exec(createUsersTable)) {
-        setError(QString("Failed to create users table: %1").arg(query.lastError().text()));
-        return false;
-    }
-
-    // Create index on name for faster searches
-    QString createNameIndex = "CREATE INDEX IF NOT EXISTS idx_users_name ON users(name)";
-    if (!query.exec(createNameIndex)) {
-        setError(QString("Failed to create name index: %1").arg(query.lastError().text()));
-        return false;
-    }
-
-    qDebug() << "Database tables created successfully";
-    return true;
 }
 
 bool DatabaseManager::addUser(const QString& name, const QString& email, const QByteArray& fingerprintTemplate, int& userId)

@@ -7,6 +7,7 @@
 #include <QSqlQuery>
 #include <QVector>
 #include <QByteArray>
+#include "database_config_dialog.h"
 
 struct User {
     int id;
@@ -21,10 +22,10 @@ class DatabaseManager : public QObject {
     Q_OBJECT
 
 public:
-    explicit DatabaseManager(const QString& dbPath = "fingerprint.db", QObject* parent = nullptr);
+    explicit DatabaseManager(QObject* parent = nullptr);
     ~DatabaseManager();
 
-    bool initialize();
+    bool initialize(const DatabaseConfigDialog::Config& config);
     bool isOpen() const;
     QString getLastError() const { return m_lastError; }
 

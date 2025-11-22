@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>migrations/sqlite/001_init.sql</file>
+    </qresource>
+</RCC>
+
