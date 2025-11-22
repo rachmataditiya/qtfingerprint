@@ -305,12 +305,12 @@ void MainWindowApp::setupUI()
     QHBoxLayout* userButtonsLayout = new QHBoxLayout();
     userButtonsLayout->setSpacing(8);
     
-    m_btnRefreshList = new QPushButton("🔄 Refresh");
+    m_btnRefreshList = new QPushButton("Refresh");
     m_btnRefreshList->setStyleSheet("QPushButton { padding: 8px; font-size: 12px; background-color: #4CAF50; color: white; font-weight: bold; } QPushButton:hover { background-color: #45a049; }");
     m_btnRefreshList->setMinimumHeight(35);
     userButtonsLayout->addWidget(m_btnRefreshList);
     
-    m_btnDeleteUser = new QPushButton("🗑️ Delete User");
+    m_btnDeleteUser = new QPushButton("Delete User");
     m_btnDeleteUser->setStyleSheet("QPushButton { padding: 8px; font-size: 12px; background-color: #f44336; color: white; font-weight: bold; } QPushButton:hover { background-color: #da190b; } QPushButton:disabled { background-color: #ccc; }");
     m_btnDeleteUser->setEnabled(false);
     m_btnDeleteUser->setMinimumHeight(35);
@@ -376,7 +376,7 @@ void MainWindowApp::onInitializeClicked()
     }
     
     updateStatus("Reader initialized successfully", false);
-    log("✓ Reader opened successfully");
+    log("Reader opened successfully");
     m_readerStatusLabel->setText("Reader: Connected");
     m_readerStatusLabel->setStyleSheet("QLabel { color: green; }");
     
@@ -413,7 +413,7 @@ void MainWindowApp::onEnrollClicked()
     // Reset progress bar and preview
     m_enrollProgress->setValue(0);
     m_enrollProgress->setFormat("0/5 scans (0%)");
-    m_enrollStatusLabel->setText("✓ Enrollment started. Click 'Capture Fingerprint' to begin scanning.");
+    m_enrollStatusLabel->setText("Enrollment started. Click 'Capture Fingerprint' to begin scanning.");
     
     // Create initial "Ready to scan" preview
     QImage readyImage(180, 180, QImage::Format_RGB888);
@@ -438,7 +438,7 @@ void MainWindowApp::onEnrollClicked()
     
     m_enrollImagePreview->setPixmap(QPixmap::fromImage(readyImage));
     
-    log(QString("🆕 Starting enrollment for: %1 %2").arg(name).arg(email.isEmpty() ? "" : "(" + email + ")"));
+    log(QString("Starting enrollment for: %1 %2").arg(name).arg(email.isEmpty() ? "" : "(" + email + ")"));
     
     enableEnrollmentControls(false);
     m_btnCaptureEnroll->setEnabled(true);
@@ -451,7 +451,7 @@ void MainWindowApp::onCaptureEnrollSample()
     }
     
     m_btnCaptureEnroll->setEnabled(false);
-    m_enrollStatusLabel->setText("📌 Place your finger on the reader. You will scan 5 times...");
+    m_enrollStatusLabel->setText("Place your finger on the reader. You will scan 5 times...");
     log("=== ENROLLMENT: Starting capture sequence ===");
     
     // Run in background thread to keep UI responsive
@@ -469,7 +469,7 @@ void MainWindowApp::onCaptureEnrollFinished()
     QString message = m_tempEnrollMessage;
     
     if (result < 0) {
-        log(QString("❌ ERROR: %1").arg(m_fpManager->getLastError()));
+        log(QString("ERROR: %1").arg(m_fpManager->getLastError()));
         m_enrollStatusLabel->setText("Capture failed");
         m_enrollmentInProgress = false;
         m_enrollProgress->setValue(0);
@@ -486,12 +486,12 @@ void MainWindowApp::onCaptureEnrollFinished()
     log(message);
     
     if (result == 1) {
-        log("✓ All scans completed! Saving fingerprint template to database...");
+        log("All scans completed! Saving fingerprint template to database...");
         
         QByteArray templateData;
         if (!m_fpManager->createEnrollmentTemplate(templateData)) {
             QMessageBox::critical(this, "Error", "Failed to create fingerprint template");
-            log("❌ Error creating template");
+            log("Error creating template");
             m_fpManager->cancelEnrollment();
             m_enrollmentInProgress = false;
             m_enrollProgress->setValue(0);
@@ -510,9 +510,9 @@ void MainWindowApp::onCaptureEnrollFinished()
                 QString("Failed to save user:\n%1").arg(m_dbManager->getLastError()));
             log(QString("❌ Database error: %1").arg(m_dbManager->getLastError()));
         } else {
-            log(QString("✓ User enrolled successfully: %1 (ID: %2)").arg(m_enrollmentUserName).arg(userId));
+            log(QString("User enrolled successfully: %1 (ID: %2)").arg(m_enrollmentUserName).arg(userId));
             QMessageBox::information(this, "Enrollment Complete", 
-                QString("✓ User '%1' enrolled successfully!\n\nUser ID: %2\nTemplate size: %3 bytes\nScans completed: 5")
+                QString("User '%1' enrolled successfully!\n\nUser ID: %2\nTemplate size: %3 bytes\nScans completed: 5")
                     .arg(m_enrollmentUserName)
                     .arg(userId)
                     .arg(templateData.size()));
@@ -522,12 +522,12 @@ void MainWindowApp::onCaptureEnrollFinished()
             m_editEnrollEmail->clear();
         }
         
-        log("🧹 Cleaning up enrollment session...");
+        log("Cleaning up enrollment session...");
         m_fpManager->cancelEnrollment();
         m_enrollmentInProgress = false;
         m_enrollProgress->setValue(0);
         m_enrollProgress->setFormat("0/5 scans (0%)");
-        m_enrollStatusLabel->setText("✓ Ready to enroll next user");
+        m_enrollStatusLabel->setText("Ready to enroll next user");
         
         // Reset preview to empty state
         QImage emptyImage(180, 180, QImage::Format_RGB888);
@@ -547,7 +547,7 @@ void MainWindowApp::onCaptureEnrollFinished()
         m_enrollImagePreview->setPixmap(QPixmap::fromImage(emptyImage));
         
         enableEnrollmentControls(true);
-        log("=== ✅ ENROLLMENT SESSION COMPLETED ===");
+        log("=== ENROLLMENT SESSION COMPLETED ===");
     } else {
         // If result is 0 (more scans needed), re-enable the capture button
          m_btnCaptureEnroll->setEnabled(true);
@@ -599,7 +599,7 @@ void MainWindowApp::onCaptureVerifySample()
     
     if (!matched && score == 0) {
         QString error = m_fpManager->getLastError();
-        log(QString("❌ Verification error: %1").arg(error));
+        log(QString("Verification error: %1").arg(error));
         m_verifyResultLabel->setText("Result: ERROR");
         m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcccc; color: red; padding: 5px; font-weight: bold; }");
         m_verifyScoreLabel->setText("Score: -");
@@ -608,17 +608,17 @@ void MainWindowApp::onCaptureVerifySample()
         m_verifyScoreLabel->setText(QString("Match Score: %1%").arg(score));
         
         if (score >= 60) {
-            m_verifyResultLabel->setText(QString("✓ MATCH: %1").arg(user.name));
+            m_verifyResultLabel->setText(QString("MATCH: %1").arg(user.name));
             m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: green; padding: 10px; font-weight: bold; font-size: 14px; }");
-            log(QString("✓ VERIFICATION SUCCESS: %1 (score: %2%)").arg(user.name).arg(score));
+            log(QString("VERIFICATION SUCCESS: %1 (score: %2%)").arg(user.name).arg(score));
             QMessageBox::information(this, "Verification Success", 
-                QString("✓ Fingerprint MATCHED!\n\nUser: %1\nScore: %2%").arg(user.name).arg(score));
+                QString("Fingerprint MATCHED!\n\nUser: %1\nScore: %2%").arg(user.name).arg(score));
         } else {
-            m_verifyResultLabel->setText(QString("✗ NO MATCH"));
+            m_verifyResultLabel->setText(QString("NO MATCH"));
             m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
-            log(QString("✗ VERIFICATION FAILED (score: %1%)").arg(score));
+            log(QString("VERIFICATION FAILED (score: %1%)").arg(score));
             QMessageBox::warning(this, "Verification Failed", 
-                QString("✗ Fingerprint does NOT match!\n\nExpected: %1\nScore: %2%")
+                QString("Fingerprint does NOT match!\n\nExpected: %1\nScore: %2%")
                     .arg(user.name).arg(score));
         }
     }
@@ -728,7 +728,7 @@ void MainWindowApp::onEnrollmentProgress(int current, int total, QString message
     m_enrollStatusLabel->setText(message);
     
     // Log progress
-    log(QString("📌 Enrollment: %1/%2 - %3").arg(current).arg(total).arg(message));
+    log(QString("Enrollment: %1/%2 - %3").arg(current).arg(total).arg(message));
     
     // Create a more realistic fingerprint visualization
     // Note: This is a simulation since U.are.U doesn't provide raw images via libfprint
