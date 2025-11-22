@@ -1,4 +1,4 @@
-QT += core gui widgets sql
+QT += core gui widgets sql concurrent
 
 CONFIG += c++17
 
@@ -8,10 +8,55 @@ TEMPLATE = app
 # Output directory
 DESTDIR = bin
 
-# Link to digitalpersonalib
-LIBS += -L$$PWD/digitalpersonalib/lib -ldigitalpersona
+# Link to digitalpersonalib (Binary)
 INCLUDEPATH += $$PWD/digitalpersonalib/include
+
+LIBS += -L$$PWD/digitalpersonalib/lib -ldigitalpersona
 QMAKE_RPATHDIR += $$PWD/digitalpersonalib/lib
+
+# Deploy library with app
+# Only copy libfprint, digitalpersonalib is copied by the previous build step or manual setup
+macx {
+    # QMAKE_POST_LINK removed to avoid copy errors during build
+}
+
+
+
+# Link to libfprint (compiled from source) - macOS Only
+macx {
+    INCLUDEPATH += $$PWD/libfprint_repo/libfprint
+    LIBS += -L$$PWD/libfprint_repo/builddir/libfprint -lfprint-2
+    QMAKE_RPATHDIR += $$PWD/libfprint_repo/builddir/libfprint
+    
+    # Deploy libfprint library
+    QMAKE_POST_LINK += cp -f $$PWD/libfprint_repo/builddir/libfprint/libfprint-2.2.dylib $$PWD/bin/
+}
+
+# Libfprint Dependencies (Homebrew on macOS)
+macx {
+    INCLUDEPATH += /opt/homebrew/include/glib-2.0 \
+                   /opt/homebrew/lib/glib-2.0/include \
+                   /opt/homebrew/include/gusb-1 \
+                   /opt/homebrew/include/libusb-1.0 \
+                   /opt/homebrew/include/pixman-1 \
+                   /opt/homebrew/include/json-glib-1.0
+
+    LIBS += -L/opt/homebrew/lib \
+            -L/opt/homebrew/Cellar/libgusb/0.4.9/lib \
+            -L/opt/homebrew/Cellar/libusb/1.0.29/lib \
+            -L/opt/homebrew/Cellar/json-glib/1.10.8/lib \
+            -L/opt/homebrew/Cellar/glib/2.86.1/lib \
+            -L/opt/homebrew/opt/gettext/lib \
+            -lglib-2.0 -lgobject-2.0 -lgio-2.0 \
+            -lgusb -lusb-1.0 -lpixman-1 -lcairo -ljson-glib-1.0 -lintl
+}
+
+unix:!macx {
+    CONFIG += link_pkgconfig
+    PKGCONFIG += glib-2.0 gusb libusb-1.0 pixman-1 libfprint-2
+}
+
+
 
 # Application sources
 SOURCES += \
@@ -23,8 +68,6 @@ HEADERS += \
     mainwindow_app.h \
     database_manager.h
 
-# Deploy library with app
-QMAKE_POST_LINK += cp -f $$PWD/digitalpersonalib/lib/libdigitalpersona.so* $$PWD/bin/
 
 # Default rules for deployment
 qnx: target.path = /tmp/$${TARGET}/bin

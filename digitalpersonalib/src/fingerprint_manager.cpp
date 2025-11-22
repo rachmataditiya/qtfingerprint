@@ -17,7 +17,12 @@
 // Include GLib/libfprint after Qt
 extern "C" {
 #include <glib.h>
+#include <glib-object.h>
+#ifdef Q_OS_MACOS
+#include <fprint.h>
+#else
 #include <libfprint-2/fprint.h>
+#endif
 }
 
 FingerprintManager::FingerprintManager()
@@ -37,6 +42,9 @@ FingerprintManager::~FingerprintManager()
 
 bool FingerprintManager::initialize()
 {
+    // Force GLib type system initialization
+    g_type_init();
+
     m_context = fp_context_new();
     if (!m_context) {
         setError("Failed to create libfprint context");
@@ -60,10 +68,15 @@ void FingerprintManager::cleanup()
         m_enrollPrint = nullptr;
     }
     
+    // On macOS, destroying the context at exit causes a crash in libgusb/libplatform
+    // due to mutex corruption (os_unfair_lock is corrupt). 
+    // Leaking the context at process exit is a safer workaround.
+#ifndef Q_OS_MACOS
     if (m_context) {
         g_object_unref(m_context);
         m_context = nullptr;
     }
+#endif
 }
 
 int FingerprintManager::getDeviceCount()

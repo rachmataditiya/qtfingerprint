@@ -1,9 +1,13 @@
 #include "mainwindow_app.h"
 #include <QApplication>
 #include <QDebug>
+#include <glib.h>
 
 int main(int argc, char *argv[])
 {
+    // Disable fatal warnings from GLib/libfprint to prevent crashes on non-critical warnings
+    g_log_set_always_fatal((GLogLevelFlags)G_LOG_LEVEL_ERROR);
+
     QApplication app(argc, argv);
     
     qInfo() << "=================================================";

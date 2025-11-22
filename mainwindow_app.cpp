@@ -9,6 +9,7 @@
 #include <QMetaObject>
 #include <QGridLayout>
 #include <QRadialGradient>
+#include <QtConcurrent>
 
 MainWindowApp::MainWindowApp(QWidget *parent)
     : QMainWindow(parent)
@@ -23,12 +24,15 @@ MainWindowApp::MainWindowApp(QWidget *parent)
 
     // Setup enrollment progress callback
     m_fpManager->setProgressCallback([this](int current, int total, QString message) {
-        // This callback is called from GLib thread, so we need to use QMetaObject::invokeMethod
-        // to update UI safely in the Qt main thread
+        // Use invokeMethod to ensure UI updates happen on the main thread
+        // This is safe even if called from a worker thread
         QMetaObject::invokeMethod(this, [this, current, total, message]() {
             onEnrollmentProgress(current, total, message);
         }, Qt::QueuedConnection);
     });
+
+    // Connect watcher
+    connect(&m_enrollWatcher, &QFutureWatcher<int>::finished, this, &MainWindowApp::onCaptureEnrollFinished);
 
     // Initialize database
     if (!m_dbManager->initialize()) {
@@ -36,13 +40,35 @@ MainWindowApp::MainWindowApp(QWidget *parent)
             QString("Failed to initialize database: %1").arg(m_dbManager->getLastError()));
     } else {
         log("Database initialized successfully");
+        qDebug() << "Calling updateUserList()...";
         updateUserList();
+        qDebug() << "updateUserList() returned.";
     }
 }
 
 MainWindowApp::~MainWindowApp()
 {
-    delete m_fpManager;
+    // Explicit cleanup in closeEvent is preferred, but just in case
+    if (m_fpManager) {
+        m_fpManager->cleanup();
+        delete m_fpManager;
+        m_fpManager = nullptr;
+    }
+}
+
+void MainWindowApp::closeEvent(QCloseEvent *event)
+{
+    // Ensure thread is done
+    if (m_enrollWatcher.isRunning()) {
+        m_enrollWatcher.waitForFinished();
+    }
+    
+    if (m_fpManager) {
+        log("Application closing, cleaning up...");
+        m_fpManager->cleanup();
+    }
+    
+    QMainWindow::closeEvent(event);
 }
 
 void MainWindowApp::setupUI()
@@ -401,12 +427,19 @@ void MainWindowApp::onCaptureEnrollSample()
     m_enrollStatusLabel->setText("📌 Place your finger on the reader. You will scan 5 times...");
     log("=== ENROLLMENT: Starting capture sequence ===");
     
-    QApplication::processEvents();
-    
-    QString message;
-    int quality;
-    QImage image;
-    int result = m_fpManager->addEnrollmentSample(message, quality, &image);
+    // Run in background thread to keep UI responsive
+    QFuture<int> future = QtConcurrent::run([this]() {
+        int quality;
+        // We write to members here, which is safe because we read them only after future finishes
+        return m_fpManager->addEnrollmentSample(m_tempEnrollMessage, quality, &m_tempEnrollImage);
+    });
+    m_enrollWatcher.setFuture(future);
+}
+
+void MainWindowApp::onCaptureEnrollFinished()
+{
+    int result = m_enrollWatcher.result();
+    QString message = m_tempEnrollMessage;
     
     if (result < 0) {
         log(QString("❌ ERROR: %1").arg(m_fpManager->getLastError()));
@@ -488,6 +521,9 @@ void MainWindowApp::onCaptureEnrollSample()
         
         enableEnrollmentControls(true);
         log("=== ✅ ENROLLMENT SESSION COMPLETED ===");
+    } else {
+        // If result is 0 (more scans needed), re-enable the capture button
+         m_btnCaptureEnroll->setEnabled(true);
     }
 }
 
@@ -636,7 +672,9 @@ void MainWindowApp::updateUserList()
     }
     
     m_userCountLabel->setText(QString("Total users: %1").arg(users.size()));
+    qDebug() << "Updating user count label done.";
     log(QString("User list updated: %1 users").arg(users.size()));
+    qDebug() << "Log called.";
 }
 
 void MainWindowApp::enableEnrollmentControls(bool enable)

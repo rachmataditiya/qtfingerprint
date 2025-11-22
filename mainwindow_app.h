@@ -17,6 +17,8 @@
 
 // Local database manager
 #include "database_manager.h"
+#include <QFutureWatcher>
+#include <QCloseEvent>
 
 class MainWindowApp : public QMainWindow {
     Q_OBJECT
@@ -25,10 +27,14 @@ public:
     MainWindowApp(QWidget *parent = nullptr);
     ~MainWindowApp();
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private slots:
     void onInitializeClicked();
     void onEnrollClicked();
     void onCaptureEnrollSample();
+    void onCaptureEnrollFinished(); // New slot
     void onVerifyClicked();
     void onCaptureVerifySample();
     void onRefreshUserList();
@@ -56,6 +62,13 @@ private:
     int m_enrollmentSampleCount;
     QString m_enrollmentUserName;
     QString m_enrollmentUserEmail;
+    
+    // Threading
+    QFutureWatcher<int> m_enrollWatcher;
+    
+    // Temp storage for worker thread results
+    QString m_tempEnrollMessage;
+    QImage m_tempEnrollImage;
 
     // UI components
     QLabel* m_statusLabel;
