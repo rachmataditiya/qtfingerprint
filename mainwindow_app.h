@@ -1,26 +1,29 @@
-#ifndef MAINWINDOW_NEW_H
-#define MAINWINDOW_NEW_H
+#ifndef MAINWINDOW_APP_H
+#define MAINWINDOW_APP_H
 
 #include <QMainWindow>
+#include <QLabel>
 #include <QPushButton>
 #include <QLineEdit>
 #include <QTextEdit>
-#include <QLabel>
 #include <QListWidget>
-#include <QProgressBar>
 #include <QGroupBox>
+#include <QProgressBar>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 
-#include "fingerprint_manager.h"
+// DigitalPersona Library
+#include <digitalpersona.h>
+
+// Local database manager
 #include "database_manager.h"
 
-class MainWindowNew : public QMainWindow {
+class MainWindowApp : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindowNew(QWidget *parent = nullptr);
-    ~MainWindowNew();
+    MainWindowApp(QWidget *parent = nullptr);
+    ~MainWindowApp();
 
 private slots:
     void onInitializeClicked();
@@ -41,28 +44,25 @@ private:
     void enableEnrollmentControls(bool enable);
     void enableVerificationControls(bool enable);
 
-    // Managers
+    // DigitalPersona Library instance
     FingerprintManager* m_fpManager;
+    
+    // Local database manager
     DatabaseManager* m_dbManager;
-
+    
     // Enrollment state
     bool m_enrollmentInProgress;
     int m_enrollmentSampleCount;
     QString m_enrollmentUserName;
     QString m_enrollmentUserEmail;
 
-    // UI Components
-    // Status
+    // UI components
     QLabel* m_statusLabel;
-    QTextEdit* m_logText;
-    QPushButton* m_btnClearLog;
-
-    // Reader Group
+    QLabel* m_readerStatusLabel;
+    
     QGroupBox* m_readerGroup;
     QPushButton* m_btnInitialize;
-    QLabel* m_readerStatusLabel;
-
-    // Enrollment Group
+    
     QGroupBox* m_enrollGroup;
     QLineEdit* m_editEnrollName;
     QLineEdit* m_editEnrollEmail;
@@ -70,21 +70,22 @@ private:
     QPushButton* m_btnCaptureEnroll;
     QProgressBar* m_enrollProgress;
     QLabel* m_enrollStatusLabel;
-
-    // Verification Group
+    
     QGroupBox* m_verifyGroup;
     QPushButton* m_btnStartVerify;
     QPushButton* m_btnCaptureVerify;
     QLabel* m_verifyResultLabel;
     QLabel* m_verifyScoreLabel;
-
-    // User List Group
+    
     QGroupBox* m_userListGroup;
     QListWidget* m_userList;
     QPushButton* m_btnRefreshList;
     QPushButton* m_btnDeleteUser;
     QLabel* m_userCountLabel;
+    
+    QTextEdit* m_logText;
+    QPushButton* m_btnClearLog;
 };
 
-#endif // MAINWINDOW_NEW_H
+#endif // MAINWINDOW_APP_H
 

@@ -26,13 +26,11 @@ INCLUDEPATH += /usr/lib/aarch64-linux-gnu/glib-2.0/include
 HEADERS += \
     include/digitalpersona.h \
     include/digitalpersona_global.h \
-    include/fingerprint_manager.h \
-    include/database_manager.h
+    include/fingerprint_manager.h
 
 # Sources
 SOURCES += \
-    src/fingerprint_manager.cpp \
-    src/database_manager.cpp
+    src/fingerprint_manager.cpp
 
 # Libraries
 LIBS += -lfprint-2 -lgio-2.0 -lgobject-2.0 -lglib-2.0

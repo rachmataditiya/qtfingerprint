@@ -1,11 +1,11 @@
-#include "mainwindow_new.h"
+#include "mainwindow_app.h"
 #include <QApplication>
 #include <QMessageBox>
 #include <QDateTime>
 #include <QDebug>
 #include <QScrollBar>
 
-MainWindowNew::MainWindowNew(QWidget *parent)
+MainWindowApp::MainWindowApp(QWidget *parent)
     : QMainWindow(parent)
     , m_fpManager(new FingerprintManager())
     , m_dbManager(new DatabaseManager("fingerprint.db", this))
@@ -13,7 +13,7 @@ MainWindowNew::MainWindowNew(QWidget *parent)
     , m_enrollmentSampleCount(0)
 {
     setupUI();
-    setWindowTitle("U.are.U 4500 Fingerprint PoC");
+    setWindowTitle("U.are.U 4500 Fingerprint Application");
     resize(1000, 700);
 
     // Initialize database
@@ -26,12 +26,12 @@ MainWindowNew::MainWindowNew(QWidget *parent)
     }
 }
 
-MainWindowNew::~MainWindowNew()
+MainWindowApp::~MainWindowApp()
 {
     delete m_fpManager;
 }
 
-void MainWindowNew::setupUI()
+void MainWindowApp::setupUI()
 {
     QWidget* centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
@@ -87,7 +87,7 @@ void MainWindowNew::setupUI()
     enrollLayout->addWidget(m_btnCaptureEnroll);
     
     m_enrollProgress = new QProgressBar();
-    m_enrollProgress->setRange(0, 4);
+    m_enrollProgress->setRange(0, 5);
     m_enrollProgress->setValue(0);
     enrollLayout->addWidget(m_enrollProgress);
     
@@ -164,20 +164,21 @@ void MainWindowNew::setupUI()
     mainLayout->addLayout(rightLayout, 1);
 
     // Connect signals
-    connect(m_btnInitialize, &QPushButton::clicked, this, &MainWindowNew::onInitializeClicked);
-    connect(m_btnStartEnroll, &QPushButton::clicked, this, &MainWindowNew::onEnrollClicked);
-    connect(m_btnCaptureEnroll, &QPushButton::clicked, this, &MainWindowNew::onCaptureEnrollSample);
-    connect(m_btnStartVerify, &QPushButton::clicked, this, &MainWindowNew::onVerifyClicked);
-    connect(m_btnCaptureVerify, &QPushButton::clicked, this, &MainWindowNew::onCaptureVerifySample);
-    connect(m_btnRefreshList, &QPushButton::clicked, this, &MainWindowNew::onRefreshUserList);
-    connect(m_btnDeleteUser, &QPushButton::clicked, this, &MainWindowNew::onDeleteUserClicked);
-    connect(m_btnClearLog, &QPushButton::clicked, this, &MainWindowNew::onClearLog);
-    connect(m_userList, &QListWidget::itemClicked, this, &MainWindowNew::onUserSelected);
+    connect(m_btnInitialize, &QPushButton::clicked, this, &MainWindowApp::onInitializeClicked);
+    connect(m_btnStartEnroll, &QPushButton::clicked, this, &MainWindowApp::onEnrollClicked);
+    connect(m_btnCaptureEnroll, &QPushButton::clicked, this, &MainWindowApp::onCaptureEnrollSample);
+    connect(m_btnStartVerify, &QPushButton::clicked, this, &MainWindowApp::onVerifyClicked);
+    connect(m_btnCaptureVerify, &QPushButton::clicked, this, &MainWindowApp::onCaptureVerifySample);
+    connect(m_btnRefreshList, &QPushButton::clicked, this, &MainWindowApp::onRefreshUserList);
+    connect(m_btnDeleteUser, &QPushButton::clicked, this, &MainWindowApp::onDeleteUserClicked);
+    connect(m_btnClearLog, &QPushButton::clicked, this, &MainWindowApp::onClearLog);
+    connect(m_userList, &QListWidget::itemClicked, this, &MainWindowApp::onUserSelected);
 }
 
-void MainWindowNew::onInitializeClicked()
+void MainWindowApp::onInitializeClicked()
 {
-    log("Initializing fingerprint reader...");
+    log("Initializing fingerprint reader using DigitalPersona Library...");
+    log(QString("Library version: %1").arg(DigitalPersona::version()));
     
     if (!m_fpManager->initialize()) {
         updateStatus("Initialization failed", true);
@@ -194,7 +195,7 @@ void MainWindowNew::onInitializeClicked()
     }
     
     updateStatus("Reader initialized successfully", false);
-    log("Reader opened successfully");
+    log("✓ Reader opened successfully");
     m_readerStatusLabel->setText("Reader: Connected");
     m_readerStatusLabel->setStyleSheet("QLabel { color: green; }");
     
@@ -203,7 +204,7 @@ void MainWindowNew::onInitializeClicked()
     m_btnStartVerify->setEnabled(true);
 }
 
-void MainWindowNew::onEnrollClicked()
+void MainWindowApp::onEnrollClicked()
 {
     QString name = m_editEnrollName->text().trimmed();
     QString email = m_editEnrollEmail->text().trimmed();
@@ -229,23 +230,22 @@ void MainWindowNew::onEnrollClicked()
     m_enrollmentUserEmail = email;
     
     m_enrollProgress->setValue(0);
-    m_enrollStatusLabel->setText("Enrollment started. Place finger on reader.");
+    m_enrollStatusLabel->setText("Enrollment started. Ready to capture.");
     log(QString("Starting enrollment for: %1").arg(name));
     
     enableEnrollmentControls(false);
     m_btnCaptureEnroll->setEnabled(true);
 }
 
-void MainWindowNew::onCaptureEnrollSample()
+void MainWindowApp::onCaptureEnrollSample()
 {
     if (!m_enrollmentInProgress) {
         return;
     }
     
     m_btnCaptureEnroll->setEnabled(false);
-    m_enrollStatusLabel->setText("📌 INSTRUCTIONS: You will scan your finger 5 TIMES. Keep finger steady during each scan...");
+    m_enrollStatusLabel->setText("📌 Scan your finger 5 times...");
     log("=== ENROLLMENT: Scan your finger 5 times ===");
-    log("SCAN 1/5: Place finger on reader NOW...");
     
     QApplication::processEvents();
     
@@ -254,9 +254,8 @@ void MainWindowNew::onCaptureEnrollSample()
     int result = m_fpManager->addEnrollmentSample(message, quality);
     
     if (result < 0) {
-        // Error
         log(QString("❌ ERROR: %1").arg(m_fpManager->getLastError()));
-        m_enrollStatusLabel->setText("Capture failed - try again");
+        m_enrollStatusLabel->setText("Capture failed");
         m_enrollmentInProgress = false;
         m_enrollProgress->setValue(0);
         enableEnrollmentControls(true);
@@ -264,19 +263,17 @@ void MainWindowNew::onCaptureEnrollSample()
         return;
     }
     
-    // Update progress
-    m_enrollProgress->setValue(5);  // All scans complete
+    m_enrollProgress->setValue(5);
     m_enrollStatusLabel->setText(message);
     log(message);
     
     if (result == 1) {
-        // Enrollment complete - save to database
         log("Saving fingerprint template to database...");
         
         QByteArray templateData;
         if (!m_fpManager->createEnrollmentTemplate(templateData)) {
             QMessageBox::critical(this, "Error", "Failed to create fingerprint template");
-            log("❌ Error creating enrollment template");
+            log("❌ Error creating template");
             m_fpManager->cancelEnrollment();
             m_enrollmentInProgress = false;
             m_enrollProgress->setValue(0);
@@ -304,7 +301,6 @@ void MainWindowNew::onCaptureEnrollSample()
             m_editEnrollEmail->clear();
         }
         
-        // Cleanup enrollment
         log("Cleaning up enrollment session...");
         m_fpManager->cancelEnrollment();
         m_enrollmentInProgress = false;
@@ -315,7 +311,7 @@ void MainWindowNew::onCaptureEnrollSample()
     }
 }
 
-void MainWindowNew::onVerifyClicked()
+void MainWindowApp::onVerifyClicked()
 {
     if (m_userList->selectedItems().isEmpty()) {
         QMessageBox::warning(this, "Selection Required", "Please select a user from the list");
@@ -329,7 +325,7 @@ void MainWindowNew::onVerifyClicked()
     log("Verification started. Place finger on reader.");
 }
 
-void MainWindowNew::onCaptureVerifySample()
+void MainWindowApp::onCaptureVerifySample()
 {
     if (m_userList->selectedItems().isEmpty()) {
         return;
@@ -347,20 +343,18 @@ void MainWindowNew::onCaptureVerifySample()
     
     User user;
     if (!m_dbManager->getUserById(userId, user)) {
-        QMessageBox::critical(this, "Error", "Failed to load user data from database");
+        QMessageBox::critical(this, "Error", "Failed to load user data");
         log("❌ Failed to load user data");
         m_btnStartVerify->setEnabled(true);
         return;
     }
     
     log(QString("Verifying against: %1").arg(user.name));
-    log("Scanning fingerprint...");
     
     int score = 0;
     bool matched = m_fpManager->verifyFingerprint(user.fingerprintTemplate, score);
     
     if (!matched && score == 0) {
-        // Error occurred
         QString error = m_fpManager->getLastError();
         log(QString("❌ Verification error: %1").arg(error));
         m_verifyResultLabel->setText("Result: ERROR");
@@ -370,21 +364,18 @@ void MainWindowNew::onCaptureVerifySample()
     } else {
         m_verifyScoreLabel->setText(QString("Match Score: %1%").arg(score));
         
-        // Threshold: 60% or higher = match
         if (score >= 60) {
             m_verifyResultLabel->setText(QString("✓ MATCH: %1").arg(user.name));
             m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: green; padding: 10px; font-weight: bold; font-size: 14px; }");
-            log(QString("✓ VERIFICATION SUCCESS: Matched with %1").arg(user.name));
-            log(QString("Match score: %1%").arg(score));
+            log(QString("✓ VERIFICATION SUCCESS: %1 (score: %2%)").arg(user.name).arg(score));
             QMessageBox::information(this, "Verification Success", 
-                QString("✓ Fingerprint MATCHED!\n\nUser: %1\nMatch Score: %2%").arg(user.name).arg(score));
+                QString("✓ Fingerprint MATCHED!\n\nUser: %1\nScore: %2%").arg(user.name).arg(score));
         } else {
-            m_verifyResultLabel->setText(QString("✗ NO MATCH (score too low)"));
+            m_verifyResultLabel->setText(QString("✗ NO MATCH"));
             m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
-            log(QString("✗ VERIFICATION FAILED: No match (score: %1%)").arg(score));
-            log(QString("Expected user: %1").arg(user.name));
+            log(QString("✗ VERIFICATION FAILED (score: %1%)").arg(score));
             QMessageBox::warning(this, "Verification Failed", 
-                QString("✗ Fingerprint does NOT match!\n\nExpected: %1\nScore: %2% (minimum 60% required)")
+                QString("✗ Fingerprint does NOT match!\n\nExpected: %1\nScore: %2%")
                     .arg(user.name).arg(score));
         }
     }
@@ -393,17 +384,17 @@ void MainWindowNew::onCaptureVerifySample()
     log("=== VERIFICATION COMPLETED ===");
 }
 
-void MainWindowNew::onRefreshUserList()
+void MainWindowApp::onRefreshUserList()
 {
     updateUserList();
 }
 
-void MainWindowNew::onUserSelected(QListWidgetItem* item)
+void MainWindowApp::onUserSelected(QListWidgetItem* item)
 {
     m_btnDeleteUser->setEnabled(item != nullptr);
 }
 
-void MainWindowNew::onDeleteUserClicked()
+void MainWindowApp::onDeleteUserClicked()
 {
     if (m_userList->selectedItems().isEmpty()) {
         return;
@@ -428,12 +419,12 @@ void MainWindowNew::onDeleteUserClicked()
     }
 }
 
-void MainWindowNew::onClearLog()
+void MainWindowApp::onClearLog()
 {
     m_logText->clear();
 }
 
-void MainWindowNew::updateStatus(const QString& status, bool isError)
+void MainWindowApp::updateStatus(const QString& status, bool isError)
 {
     if (isError) {
         m_statusLabel->setText(QString("Status: ERROR - %1").arg(status));
@@ -444,14 +435,14 @@ void MainWindowNew::updateStatus(const QString& status, bool isError)
     }
 }
 
-void MainWindowNew::log(const QString& message)
+void MainWindowApp::log(const QString& message)
 {
     QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss");
     m_logText->append(QString("[%1] %2").arg(timestamp).arg(message));
     m_logText->verticalScrollBar()->setValue(m_logText->verticalScrollBar()->maximum());
 }
 
-void MainWindowNew::updateUserList()
+void MainWindowApp::updateUserList()
 {
     m_userList->clear();
     
@@ -468,7 +459,7 @@ void MainWindowNew::updateUserList()
     log(QString("User list updated: %1 users").arg(users.size()));
 }
 
-void MainWindowNew::enableEnrollmentControls(bool enable)
+void MainWindowApp::enableEnrollmentControls(bool enable)
 {
     m_editEnrollName->setEnabled(enable);
     m_editEnrollEmail->setEnabled(enable);
@@ -476,7 +467,7 @@ void MainWindowNew::enableEnrollmentControls(bool enable)
     m_btnCaptureEnroll->setEnabled(!enable);
 }
 
-void MainWindowNew::enableVerificationControls(bool enable)
+void MainWindowApp::enableVerificationControls(bool enable)
 {
     m_btnStartVerify->setEnabled(enable && m_fpManager->isReaderOpen());
     m_btnCaptureVerify->setEnabled(!enable);

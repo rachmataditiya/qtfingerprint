@@ -12,9 +12,11 @@
  * Features:
  * - Fingerprint enrollment (registration) with multiple scans
  * - Fingerprint verification against stored templates
- * - SQLite database integration for user management
  * - Thread-safe operations
  * - Qt integration
+ * 
+ * Note: Database management is NOT included in this library.
+ * Applications should handle their own database operations.
  * 
  * Example usage:
  * @code
@@ -38,14 +40,19 @@
  *     QString message;
  *     int quality;
  *     int result = fpManager->addEnrollmentSample(message, quality);
- *     // ... handle enrollment
+ *     
+ *     if (result == 1) {
+ *         // Enrollment complete
+ *         QByteArray templateData;
+ *         fpManager->createEnrollmentTemplate(templateData);
+ *         // Save templateData to your database
+ *     }
  * }
  * @endcode
  */
 
 #include "digitalpersona_global.h"
 #include "fingerprint_manager.h"
-#include "database_manager.h"
 
 // Library version
 #define DIGITALPERSONA_VERSION_MAJOR 1
