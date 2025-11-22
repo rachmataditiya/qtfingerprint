@@ -1,0 +1,73 @@
+# Build artifacts
+*.o
+*.obj
+moc_*.cpp
+moc_*.h
+moc_predefs.h
+qrc_*.cpp
+ui_*.h
+Makefile
+Makefile_poc
+.qmake.stash
+
+# Binaries
+bin/
+build/
+*.exe
+*.app
+FingerprintPoC
+
+# Qt Creator files
+*.pro.user
+*.pro.user.*
+*.autosave
+.qtcreator/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+fingerprint.db
+
+# Core dumps
+core
+core.*
+*.core
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Sensitive files
+sudopass.txt
+*password*
+*.key
+*.pem
+
+# SDK binaries (large files)
+sdk/setup_tar_32.bin
+sdk/setup_tar_64.bin
+
+# Build directories
+debug/
+release/
+x64/
+x86/
+
+# Generated documentation
+doc/html/
+doc/latex/
+
+# System files
+.directory
+Thumbs.db
+
