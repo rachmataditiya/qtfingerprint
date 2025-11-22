@@ -10,6 +10,8 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QCoreApplication>
+#include <QGroupBox>
+#include <QStackedWidget>
 
 DatabaseConfigDialog::DatabaseConfigDialog(QWidget *parent)
     : QDialog(parent)
@@ -35,40 +37,73 @@ DatabaseConfigDialog::DatabaseConfigDialog(QWidget *parent)
     }
     
     onTypeChanged(m_typeCombo->currentText());
+    
+    // Check available drivers
+    QStringList drivers = QSqlDatabase::drivers();
+    if (!drivers.contains("QPSQL")) {
+        int index = m_typeCombo->findText("POSTGRESQL");
+        if (index >= 0) {
+            m_typeCombo->setItemData(index, 0, Qt::UserRole - 1); // Disable item in view (requires delegate or just remove)
+            // Simpler: Remove and add Note
+            m_typeCombo->removeItem(index);
+            m_statusLabel->setText("PostgreSQL driver (QPSQL) not found.");
+        }
+    }
 }
 
 void DatabaseConfigDialog::setupUI()
 {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    QFormLayout* formLayout = new QFormLayout();
     
+    // Database Type Selection
+    QHBoxLayout* typeLayout = new QHBoxLayout();
+    typeLayout->addWidget(new QLabel("Database Type:"));
     m_typeCombo = new QComboBox();
     m_typeCombo->addItems({"SQLITE", "POSTGRESQL"});
     connect(m_typeCombo, &QComboBox::currentTextChanged, this, &DatabaseConfigDialog::onTypeChanged);
-    formLayout->addRow("Database Type:", m_typeCombo);
+    typeLayout->addWidget(m_typeCombo);
+    mainLayout->addLayout(typeLayout);
     
-    m_hostEdit = new QLineEdit("localhost");
-    formLayout->addRow("Host:", m_hostEdit);
+    // Settings Stack
+    m_settingsStack = new QStackedWidget();
     
-    m_portEdit = new QLineEdit("5432");
-    formLayout->addRow("Port:", m_portEdit);
+    // Page 1: SQLite
+    QWidget* sqlitePage = new QWidget();
+    QFormLayout* sqliteLayout = new QFormLayout(sqlitePage);
     
     QHBoxLayout* nameLayout = new QHBoxLayout();
-    m_nameEdit = new QLineEdit(); // Empty initially, set in constructor
+    m_nameEdit = new QLineEdit(); 
     m_browseBtn = new QPushButton("Browse...");
     connect(m_browseBtn, &QPushButton::clicked, this, &DatabaseConfigDialog::onBrowseClicked);
     nameLayout->addWidget(m_nameEdit);
     nameLayout->addWidget(m_browseBtn);
-    formLayout->addRow("Database Name/File:", nameLayout);
+    
+    sqliteLayout->addRow("Database File:", nameLayout);
+    m_settingsStack->addWidget(sqlitePage);
+    
+    // Page 2: PostgreSQL
+    QWidget* pgPage = new QWidget();
+    QFormLayout* pgLayout = new QFormLayout(pgPage);
+    
+    m_hostEdit = new QLineEdit("localhost");
+    pgLayout->addRow("Host:", m_hostEdit);
+    
+    m_portEdit = new QLineEdit("5432");
+    pgLayout->addRow("Port:", m_portEdit);
+    
+    m_pgNameEdit = new QLineEdit("fingerprint_db");
+    pgLayout->addRow("Database Name:", m_pgNameEdit);
     
     m_userEdit = new QLineEdit("postgres");
-    formLayout->addRow("Username:", m_userEdit);
+    pgLayout->addRow("Username:", m_userEdit);
     
     m_passEdit = new QLineEdit();
     m_passEdit->setEchoMode(QLineEdit::Password);
-    formLayout->addRow("Password:", m_passEdit);
+    pgLayout->addRow("Password:", m_passEdit);
     
-    mainLayout->addLayout(formLayout);
+    m_settingsStack->addWidget(pgPage);
+    
+    mainLayout->addWidget(m_settingsStack);
     
     m_statusLabel = new QLabel("");
     m_statusLabel->setStyleSheet("color: red");
@@ -89,19 +124,16 @@ void DatabaseConfigDialog::setupUI()
 
 void DatabaseConfigDialog::onTypeChanged(const QString& type)
 {
-    bool isSqlite = (type == "SQLITE");
-    m_hostEdit->setEnabled(!isSqlite);
-    m_portEdit->setEnabled(!isSqlite);
-    m_userEdit->setEnabled(!isSqlite);
-    m_passEdit->setEnabled(!isSqlite);
-    m_browseBtn->setVisible(isSqlite);
-    
-    if (isSqlite) {
-        // If current text is empty or doesn't look like a path, set default
+    if (type == "SQLITE") {
+        m_settingsStack->setCurrentIndex(0);
+        
+        // Default path check
         if (m_nameEdit->text().isEmpty() || (!m_nameEdit->text().contains("/") && !m_nameEdit->text().contains("\\"))) {
              QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
              m_nameEdit->setText(QDir(dataPath).filePath("fingerprint.db"));
         }
+    } else {
+        m_settingsStack->setCurrentIndex(1);
     }
 }
 
@@ -127,7 +159,7 @@ void DatabaseConfigDialog::onTestClicked()
         db = QSqlDatabase::addDatabase("QPSQL", "TEST_CONN");
         db.setHostName(m_hostEdit->text());
         db.setPort(m_portEdit->text().toInt());
-        db.setDatabaseName(m_nameEdit->text());
+        db.setDatabaseName(m_pgNameEdit->text());
         db.setUserName(m_userEdit->text());
         db.setPassword(m_passEdit->text());
     }
@@ -139,6 +171,13 @@ void DatabaseConfigDialog::onTestClicked()
     } else {
         m_statusLabel->setStyleSheet("color: red");
         m_statusLabel->setText("Connection Failed: " + db.lastError().text());
+        
+        // Hint about missing driver
+        if (db.lastError().type() == QSqlError::ConnectionError && type == "POSTGRESQL") {
+             if (!QSqlDatabase::drivers().contains("QPSQL")) {
+                 m_statusLabel->setText("Error: PostgreSQL driver (QPSQL) not installed.");
+             }
+        }
     }
     QSqlDatabase::removeDatabase("TEST_CONN");
 }
@@ -147,11 +186,15 @@ void DatabaseConfigDialog::onSaveClicked()
 {
     Config cfg;
     cfg.type = m_typeCombo->currentText();
-    cfg.host = m_hostEdit->text();
-    cfg.port = m_portEdit->text().toInt();
-    cfg.name = m_nameEdit->text();
-    cfg.user = m_userEdit->text();
-    cfg.password = m_passEdit->text();
+    if (cfg.type == "SQLITE") {
+        cfg.name = m_nameEdit->text();
+    } else {
+        cfg.host = m_hostEdit->text();
+        cfg.port = m_portEdit->text().toInt();
+        cfg.name = m_pgNameEdit->text();
+        cfg.user = m_userEdit->text();
+        cfg.password = m_passEdit->text();
+    }
     
     saveConfig(cfg);
     accept();
@@ -164,7 +207,17 @@ DatabaseConfigDialog::Config DatabaseConfigDialog::loadConfig()
     cfg.type = settings.value("DB/Type", "SQLITE").toString();
     cfg.host = settings.value("DB/Host", "localhost").toString();
     cfg.port = settings.value("DB/Port", 5432).toInt();
-    cfg.name = settings.value("DB/Name", "fingerprint.db").toString();
+    
+    // Handle legacy config which might store sqlite filename in same key as postgres db name
+    // Ideally we should have separated them, but let's infer
+    QString storedName = settings.value("DB/Name", "fingerprint.db").toString();
+    
+    if (cfg.type == "SQLITE") {
+        cfg.name = storedName;
+    } else {
+        cfg.name = storedName; // For postgres this is dbname
+    }
+    
     cfg.user = settings.value("DB/User", "postgres").toString();
     cfg.password = settings.value("DB/Password", "").toString();
     return cfg;
@@ -187,4 +240,3 @@ bool DatabaseConfigDialog::hasConfig()
     QSettings settings("Arkana", "FingerprintApp");
     return settings.value("DB/Configured", false).toBool();
 }
-

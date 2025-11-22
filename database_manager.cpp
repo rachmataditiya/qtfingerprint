@@ -7,6 +7,7 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QDir>
+#include <QStandardPaths>
 
 DatabaseManager::DatabaseManager(QObject* parent)
     : QObject(parent)
@@ -26,18 +27,31 @@ bool DatabaseManager::initialize(const DatabaseConfigDialog::Config& config)
         m_db = QSqlDatabase::database("qt_sql_default_connection");
     } else {
         if (config.type == "SQLITE") {
-            // Ensure directory exists
-            QFileInfo fi(config.name);
-            QDir dir = fi.absoluteDir();
-            if (!dir.exists()) {
-                if (!dir.mkpath(".")) {
-                    setError(QString("Failed to create database directory: %1").arg(dir.path()));
+            // Robust Path Logic:
+            // 1. If absolute, use it.
+            // 2. If relative, prepend AppDataLocation.
+            QString dbPath = config.name;
+            QFileInfo fi(dbPath);
+            if (fi.isRelative()) {
+                 QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+                 QDir dir(dataPath);
+                 if (!dir.exists()) dir.mkpath(".");
+                 dbPath = dir.filePath(dbPath);
+                 qDebug() << "Resolved relative SQLite path to:" << dbPath;
+            }
+
+            // Create directory if needed
+            QFileInfo finalFi(dbPath);
+            QDir finalDir = finalFi.absoluteDir();
+            if (!finalDir.exists()) {
+                if (!finalDir.mkpath(".")) {
+                    setError(QString("Failed to create database directory: %1").arg(finalDir.path()));
                     return false;
                 }
             }
             
             m_db = QSqlDatabase::addDatabase("QSQLITE");
-            m_db.setDatabaseName(config.name);
+            m_db.setDatabaseName(dbPath);
         } else {
             m_db = QSqlDatabase::addDatabase("QPSQL");
             m_db.setHostName(config.host);

@@ -43,6 +43,8 @@ private:
     QPushButton* m_browseBtn;
     QLabel* m_statusLabel;
     QPushButton* m_saveBtn;
+    class QStackedWidget* m_settingsStack;
+    QLineEdit* m_pgNameEdit; // Separate edit for PG database name
     
     void setupUI();
 };
