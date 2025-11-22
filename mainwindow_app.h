@@ -43,6 +43,7 @@ private:
     void updateUserList();
     void enableEnrollmentControls(bool enable);
     void enableVerificationControls(bool enable);
+    void onEnrollmentProgress(int current, int total, QString message);
 
     // DigitalPersona Library instance
     FingerprintManager* m_fpManager;
@@ -70,6 +71,7 @@ private:
     QPushButton* m_btnCaptureEnroll;
     QProgressBar* m_enrollProgress;
     QLabel* m_enrollStatusLabel;
+    QLabel* m_enrollImagePreview;
     
     QGroupBox* m_verifyGroup;
     QPushButton* m_btnStartVerify;

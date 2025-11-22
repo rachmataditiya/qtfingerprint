@@ -1,5 +1,6 @@
 #include "fingerprint_manager.h"
 #include <QDebug>
+#include <QDateTime>
 #include <cstring>
 
 // Undefine GLib macros that conflict with Qt
@@ -23,6 +24,7 @@ FingerprintManager::FingerprintManager()
     : m_context(nullptr)
     , m_device(nullptr)
     , m_enrollPrint(nullptr)
+    , m_lastImage(nullptr)
     , m_enrollmentCount(0)
     , m_enrollmentInProgress(false)
 {
@@ -48,6 +50,11 @@ void FingerprintManager::cleanup()
 {
     closeReader();
     
+    if (m_lastImage) {
+        g_object_unref(m_lastImage);
+        m_lastImage = nullptr;
+    }
+    
     if (m_enrollPrint) {
         g_object_unref(m_enrollPrint);
         m_enrollPrint = nullptr;
@@ -59,7 +66,7 @@ void FingerprintManager::cleanup()
     }
 }
 
-int FingerprintManager::getReaderCount()
+int FingerprintManager::getDeviceCount()
 {
     if (!m_context) {
         return 0;
@@ -72,14 +79,76 @@ int FingerprintManager::getReaderCount()
     return count;
 }
 
+QVector<DeviceInfo> FingerprintManager::getAvailableDevices()
+{
+    QVector<DeviceInfo> deviceList;
+    
+    if (!m_context) {
+        return deviceList;
+    }
+    
+    GPtrArray* devices = fp_context_get_devices(m_context);
+    
+    for (guint i = 0; i < devices->len; ++i) {
+        FpDevice* device = FP_DEVICE(g_ptr_array_index(devices, i));
+        
+        DeviceInfo info;
+        info.name = QString(fp_device_get_name(device));
+        info.driver = QString(fp_device_get_driver(device));
+        info.deviceId = QString(fp_device_get_device_id(device));
+        info.isOpen = fp_device_is_open(device);
+        info.supportsCapture = fp_device_has_feature(device, FP_DEVICE_FEATURE_CAPTURE);
+        info.supportsIdentify = fp_device_has_feature(device, FP_DEVICE_FEATURE_IDENTIFY);
+        
+        deviceList.append(info);
+    }
+    
+    g_ptr_array_unref(devices);
+    
+    return deviceList;
+}
+
+QString FingerprintManager::getDeviceName() const
+{
+    if (!m_device) {
+        return QString();
+    }
+    
+    return QString(fp_device_get_name(m_device));
+}
+
+DeviceInfo FingerprintManager::getCurrentDeviceInfo() const
+{
+    DeviceInfo info;
+    
+    if (!m_device) {
+        return info;
+    }
+    
+    info.name = QString(fp_device_get_name(m_device));
+    info.driver = QString(fp_device_get_driver(m_device));
+    info.deviceId = QString(fp_device_get_device_id(m_device));
+    info.isOpen = fp_device_is_open(m_device);
+    info.supportsCapture = fp_device_has_feature(m_device, FP_DEVICE_FEATURE_CAPTURE);
+    info.supportsIdentify = fp_device_has_feature(m_device, FP_DEVICE_FEATURE_IDENTIFY);
+    
+    return info;
+}
+
 bool FingerprintManager::openReader()
 {
+    return openReader(0); // Open first device
+}
+
+bool FingerprintManager::openReader(int deviceIndex)
+{
     if (m_device) {
-        return true; // Already open
+        qDebug() << "Device already open, closing first...";
+        closeReader();
     }
     
     if (!m_context) {
-        setError("Context not initialized");
+        setError("Context not initialized. Call initialize() first.");
         return false;
     }
     
@@ -90,8 +159,15 @@ bool FingerprintManager::openReader()
         return false;
     }
     
-    // Use first device
-    m_device = FP_DEVICE(g_object_ref(g_ptr_array_index(devices, 0)));
+    if (deviceIndex < 0 || deviceIndex >= (int)devices->len) {
+        g_ptr_array_unref(devices);
+        setError(QString("Invalid device index: %1 (available: 0-%2)")
+                 .arg(deviceIndex).arg(devices->len - 1));
+        return false;
+    }
+    
+    // Get the specified device
+    m_device = FP_DEVICE(g_object_ref(g_ptr_array_index(devices, deviceIndex)));
     g_ptr_array_unref(devices);
     
     // Open device
@@ -128,37 +204,53 @@ void FingerprintManager::closeReader()
     }
 }
 
+// Callback data structure
+struct EnrollmentCallbackData {
+    int* enrollmentCount;
+    ProgressCallback* progressCallback;
+};
+
 // Callback for enrollment progress
 static void enroll_progress_cb(FpDevice* device, gint completed_stages, FpPrint* print, 
                                 gpointer user_data, GError* error)
 {
-    (void)device;  // Unused
-    (void)print;   // Unused
-    (void)error;   // Unused
+    (void)device;
+    (void)print;
+    (void)error;
     
-    int* count = (int*)user_data;
-    if (count) {
-        *count = completed_stages;
+    EnrollmentCallbackData* data = (EnrollmentCallbackData*)user_data;
+    if (data) {
+        if (data->enrollmentCount) {
+            *data->enrollmentCount = completed_stages;
+        }
         
         // User-friendly progress messages
+        QString message;
         switch(completed_stages) {
             case 1:
-                qDebug() << "✓ SCAN 1/5 Complete - Lift finger and place again...";
+                message = "✓ SCAN 1/5 Complete - Lift finger and place again...";
                 break;
             case 2:
-                qDebug() << "✓ SCAN 2/5 Complete - Lift finger and place again...";
+                message = "✓ SCAN 2/5 Complete - Lift finger and place again...";
                 break;
             case 3:
-                qDebug() << "✓ SCAN 3/5 Complete - Lift finger and place again...";
+                message = "✓ SCAN 3/5 Complete - Lift finger and place again...";
                 break;
             case 4:
-                qDebug() << "✓ SCAN 4/5 Complete - Lift finger and place again...";
+                message = "✓ SCAN 4/5 Complete - Lift finger and place again...";
                 break;
             case 5:
-                qDebug() << "✓ SCAN 5/5 Complete - Processing fingerprint template...";
+                message = "✓ SCAN 5/5 Complete - Processing fingerprint template...";
                 break;
             default:
-                qDebug() << "Enrollment progress:" << completed_stages << "stages completed";
+                message = QString("Enrollment progress: %1 stages completed").arg(completed_stages);
+        }
+        
+        qDebug() << message;
+        
+        // Call progress callback if set
+        if (data->progressCallback && *data->progressCallback) {
+            (*data->progressCallback)(completed_stages, 5, message);
         }
     }
 }
@@ -181,7 +273,7 @@ bool FingerprintManager::startEnrollment()
     return true;
 }
 
-int FingerprintManager::addEnrollmentSample(QString& message, int& quality)
+int FingerprintManager::addEnrollmentSample(QString& message, int& quality, QImage* image)
 {
     if (!m_device || !m_enrollmentInProgress) {
         setError("Enrollment not started");
@@ -211,13 +303,18 @@ int FingerprintManager::addEnrollmentSample(QString& message, int& quality)
     qDebug() << "Capturing enrollment samples...";
     qDebug() << "Keep finger steady on the reader...";
     
+    // Setup callback data
+    EnrollmentCallbackData callbackData;
+    callbackData.enrollmentCount = &m_enrollmentCount;
+    callbackData.progressCallback = &m_progressCallback;
+    
     // Enroll - this will capture all required samples
     FpPrint* enrolled_print = fp_device_enroll_sync(
         m_device, 
         template_print, 
         nullptr, 
         enroll_progress_cb,
-        &m_enrollmentCount,
+        &callbackData,
         &error
     );
     
@@ -244,6 +341,10 @@ int FingerprintManager::addEnrollmentSample(QString& message, int& quality)
     qDebug() << "Enrolled print received, checking validity...";
     qDebug() << "template_print ptr:" << (void*)template_print;
     qDebug() << "enrolled_print ptr:" << (void*)enrolled_print;
+    
+    // Note: libfprint doesn't expose raw images from enrollment for most devices
+    // The image preview will be generated by the UI callback instead
+    (void)image; // Suppress unused parameter warning
     
     // Clean up old enrollment if any
     if (m_enrollPrint) {
@@ -339,6 +440,21 @@ bool FingerprintManager::createEnrollmentTemplate(QByteArray& templateData)
     return true;
 }
 
+bool FingerprintManager::createEnrollmentTemplate(FingerprintTemplate& fpTemplate)
+{
+    QByteArray templateData;
+    if (!createEnrollmentTemplate(templateData)) {
+        return false;
+    }
+    
+    fpTemplate.data = templateData;
+    fpTemplate.qualityScore = 95; // High quality since enrollment completed successfully
+    fpTemplate.timestamp = QDateTime::currentDateTime();
+    fpTemplate.scanCount = m_enrollmentCount;
+    
+    return true;
+}
+
 void FingerprintManager::cancelEnrollment()
 {
     m_enrollmentCount = 0;
@@ -374,6 +490,11 @@ bool FingerprintManager::verifyFingerprint(const QByteArray& templateData, int& 
     g_object_unref(storedPrint);
     
     return result && matched;
+}
+
+bool FingerprintManager::verifyFingerprint(const FingerprintTemplate& fpTemplate, int& score)
+{
+    return verifyFingerprint(fpTemplate.data, score);
 }
 
 bool FingerprintManager::captureAndMatch(FpPrint* storedPrint, bool& matched, int& score)
@@ -453,5 +574,31 @@ void FingerprintManager::setError(const QString& error)
 {
     m_lastError = error;
     qWarning() << "FingerprintManager Error:" << error;
+}
+
+QImage FingerprintManager::convertFpImageToQImage(FpImage* fpImage)
+{
+    if (!fpImage) {
+        return QImage();
+    }
+    
+    gint width = fp_image_get_width(fpImage);
+    gint height = fp_image_get_height(fpImage);
+    gsize data_len = 0;
+    const guchar* data = fp_image_get_data(fpImage, &data_len);
+    
+    if (!data || width <= 0 || height <= 0) {
+        qWarning() << "Invalid FpImage data";
+        return QImage();
+    }
+    
+    // FpImage is grayscale, convert to QImage
+    QImage image(width, height, QImage::Format_Grayscale8);
+    
+    for (int y = 0; y < height; ++y) {
+        memcpy(image.scanLine(y), data + (y * width), width);
+    }
+    
+    return image;
 }
 

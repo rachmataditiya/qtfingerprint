@@ -3,7 +3,7 @@ TARGET = digitalpersona
 VERSION = 1.0.0
 
 CONFIG += qt shared c++17
-QT += core sql
+QT += core gui
 
 # Output directories
 DESTDIR = $$PWD/lib
