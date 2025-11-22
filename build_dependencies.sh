@@ -2,13 +2,12 @@
 set -e
 
 # Detect qmake
-# Prefer Homebrew Qt 5 if available (common for existing macOS projects)
-if [ -f "/opt/homebrew/opt/qt@5/bin/qmake" ]; then
-    QMAKE_CMD="/opt/homebrew/opt/qt@5/bin/qmake"
+if command -v qmake6 &> /dev/null; then
+    QMAKE_CMD="qmake6"
 elif command -v qmake &> /dev/null; then
     QMAKE_CMD="qmake"
-elif command -v qmake6 &> /dev/null; then
-    QMAKE_CMD="qmake6"
+elif [ -f "/opt/homebrew/opt/qt@5/bin/qmake" ]; then
+    QMAKE_CMD="/opt/homebrew/opt/qt@5/bin/qmake"
 else
     echo "Error: qmake/qmake6 not found. Please install Qt."
     exit 1
