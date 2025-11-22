@@ -28,8 +28,17 @@ macx {
     LIBS += -L$$PWD/libfprint_repo/builddir/libfprint -lfprint-2
     QMAKE_RPATHDIR += $$PWD/libfprint_repo/builddir/libfprint
     
-    # Deploy libfprint library
-    QMAKE_POST_LINK += cp -f $$PWD/libfprint_repo/builddir/libfprint/libfprint-2.2.dylib $$PWD/bin/
+    # Automate bundling of libraries and fixing load paths
+    APP_BUNDLE_DIR = $$DESTDIR/$${TARGET}.app
+    FRAMEWORKS_DIR = $$APP_BUNDLE_DIR/Contents/Frameworks
+    EXECUTABLE_PATH = $$APP_BUNDLE_DIR/Contents/MacOS/$${TARGET}
+
+    QMAKE_POST_LINK += mkdir -p $$FRAMEWORKS_DIR && \
+                       cp -f $$PWD/digitalpersonalib/lib/libdigitalpersona.1.dylib $$FRAMEWORKS_DIR/ && \
+                       install_name_tool -id @rpath/libdigitalpersona.1.dylib $$FRAMEWORKS_DIR/libdigitalpersona.1.dylib && \
+                       cp -f $$PWD/libfprint_repo/builddir/libfprint/libfprint-2.2.dylib $$FRAMEWORKS_DIR/ && \
+                       install_name_tool -id @rpath/libfprint-2.2.dylib $$FRAMEWORKS_DIR/libfprint-2.2.dylib && \
+                       install_name_tool -change libdigitalpersona.1.dylib @rpath/libdigitalpersona.1.dylib $$EXECUTABLE_PATH
 }
 
 # Libfprint Dependencies (Homebrew on macOS)
