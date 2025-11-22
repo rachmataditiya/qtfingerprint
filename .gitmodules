@@ -1,0 +1,6 @@
+[submodule "digitalpersonalib"]
+	path = digitalpersonalib
+	url = https://github.com/rachmataditiya/libdigitalpersona
+[submodule "libfprint_repo"]
+	path = libfprint_repo
+	url = https://github.com/rachmataditiya/libfprint-mac
