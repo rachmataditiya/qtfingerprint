@@ -62,7 +62,9 @@ macx {
 
 unix:!macx {
     CONFIG += link_pkgconfig
-    PKGCONFIG += glib-2.0 gusb libusb-1.0 pixman-1 libfprint-2
+    # Only libfprint-2 is usually needed, it pulls other deps automatically.
+    # We include glib-2.0 because we use GMainLoop/GError in our code.
+    PKGCONFIG += libfprint-2 glib-2.0
 }
 
 
