@@ -142,7 +142,7 @@ void DatabaseConfigDialog::setupUI()
     m_portEdit->setStyleSheet("padding: 5px;");
     pgLayout->addRow("Port:", m_portEdit);
     
-    m_pgNameEdit = new QLineEdit("fingerprint_db");
+    m_pgNameEdit = new QLineEdit("fingerprint");
     m_pgNameEdit->setStyleSheet("padding: 5px;");
     pgLayout->addRow("Database Name:", m_pgNameEdit);
     
