@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fingerprint PoC</string>
+    
+    <!-- Status Messages -->
+    <string name="status_ready">Ready - Tap \'Initialize Reader\' to begin</string>
+    <string name="status_initialized">Reader initialized successfully</string>
+    <string name="status_not_available">Fingerprint hardware not available</string>
+    
+    <!-- Reader Initialization -->
+    <string name="reader_initialization">Reader Initialization</string>
+    <string name="btn_initialize">Initialize Reader</string>
+    <string name="initializing">Initializing...</string>
+    
+    <!-- Enrollment -->
+    <string name="enrollment">Enrollment (Registration)</string>
+    <string name="hint_name">Name</string>
+    <string name="hint_email">Email (optional)</string>
+    <string name="btn_start_enroll">Start Enrollment</string>
+    <string name="enroll_progress">Scan %1$d/%2$d complete</string>
+    <string name="enroll_complete">Enrollment completed successfully!</string>
+    
+    <!-- Verification -->
+    <string name="verification">Verification</string>
+    <string name="btn_start_verify">Start Verification</string>
+    <string name="verify_instruction">Place your finger on the sensor...</string>
+    <string name="verify_success">Verification successful! Score: %1$d</string>
+    <string name="verify_failed">Verification failed - No match</string>
+    
+    <!-- Identification -->
+    <string name="identification">Identification</string>
+    <string name="btn_identify">Identify User</string>
+    <string name="identify_instruction">Identifying... Place finger on sensor</string>
+    <string name="identify_success">User identified! ID: %1$d, Score: %2$d</string>
+    <string name="identify_failed">No matching user found</string>
+    
+    <!-- User List -->
+    <string name="user_list">User List</string>
+    <string name="btn_refresh">Refresh</string>
+    <string name="btn_delete">Delete Selected User</string>
+    <string name="user_count">Total users: %1$d</string>
+    <string name="no_user_selected">No user selected</string>
+    <string name="selected_user">Selected: %1$s</string>
+    
+    <!-- Messages -->
+    <string name="msg_enter_name">Please enter a name</string>
+    <string name="msg_init_first">Please initialize reader first</string>
+    <string name="msg_select_user">Please select a user first</string>
+    <string name="msg_user_deleted">User deleted</string>
+    <string name="msg_delete_confirm">Are you sure you want to delete this user?</string>
+    
+    <!-- Errors -->
+    <string name="error_hardware">Fingerprint hardware is not available on this device.</string>
+    <string name="error_enrollment">Enrollment error: %1$s</string>
+    <string name="error_api">Failed to connect to server. Please check your network connection.</string>
+</resources>
+
