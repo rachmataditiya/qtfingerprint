@@ -65,6 +65,10 @@ unix:!macx {
     # Only libfprint-2 is usually needed, it pulls other deps automatically.
     # We include glib-2.0 because we use GMainLoop/GError in our code.
     PKGCONFIG += libfprint-2 glib-2.0
+    
+    # Ensure custom library can be found at runtime
+    QMAKE_LFLAGS += -Wl,-rpath,\'\$$ORIGIN/../digitalpersonalib/lib\'
+    QMAKE_LFLAGS += -Wl,-rpath,\'\$$ORIGIN/lib\'
 }
 
 
