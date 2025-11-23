@@ -50,6 +50,7 @@ private:
     void enableEnrollmentControls(bool enable);
     void enableVerificationControls(bool enable);
     void onEnrollmentProgress(int current, int total, QString message);
+    void processEnrollmentResult(int result);
 
     // DigitalPersona Library instance
     FingerprintManager* m_fpManager;

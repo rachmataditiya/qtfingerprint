@@ -33,8 +33,8 @@ MainWindowApp::MainWindowApp(QWidget *parent)
         }, Qt::AutoConnection);
     });
 
-    // Connect watcher - REMOVED as we are running on main thread now
-    // connect(&m_enrollWatcher, &QFutureWatcher<int>::finished, this, &MainWindowApp::onCaptureEnrollFinished);
+    // Connect watcher - restored for macOS async handling
+    connect(&m_enrollWatcher, &QFutureWatcher<int>::finished, this, &MainWindowApp::onCaptureEnrollFinished);
 
     // Initialize database with configuration dialog
     if (!DatabaseConfigDialog::hasConfig()) {
@@ -457,12 +457,31 @@ void MainWindowApp::onCaptureEnrollSample()
     m_enrollStatusLabel->setText("Place your finger on the reader. You will scan 5 times...");
     log("=== ENROLLMENT: Starting capture sequence ===");
     
+#ifdef Q_OS_MACOS
+    // On macOS, running synchronously blocks the UI too much despite processEvents.
+    // We run in a background thread to keep UI responsive.
+    QFuture<int> future = QtConcurrent::run([this]() {
+        int quality;
+        // We write to members here, which is safe because we read them only after future finishes
+        return m_fpManager->addEnrollmentSample(m_tempEnrollMessage, quality, &m_tempEnrollImage);
+    });
+    m_enrollWatcher.setFuture(future);
+#else
+    // Linux implementation (Main Thread Synchronous)
+    // This prevents "scan hang" issues seen on Linux with threading.
     QApplication::processEvents();
     
-    QString message;
     int quality;
-    QImage image;
-    int result = m_fpManager->addEnrollmentSample(message, quality, &image);
+    int result = m_fpManager->addEnrollmentSample(m_tempEnrollMessage, quality, &m_tempEnrollImage);
+    
+    // Handle result immediately
+    processEnrollmentResult(result);
+#endif
+}
+
+void MainWindowApp::processEnrollmentResult(int result)
+{
+    QString message = m_tempEnrollMessage;
     
     if (result < 0) {
         log(QString("ERROR: %1").arg(m_fpManager->getLastError()));
@@ -552,7 +571,7 @@ void MainWindowApp::onCaptureEnrollSample()
 
 void MainWindowApp::onCaptureEnrollFinished()
 {
-    // Unused now
+    processEnrollmentResult(m_enrollWatcher.result());
 }
 
 void MainWindowApp::onVerifyClicked()
