@@ -25,11 +25,12 @@ MainWindowApp::MainWindowApp(QWidget *parent)
 
     // Setup enrollment progress callback
     m_fpManager->setProgressCallback([this](int current, int total, QString message) {
-        // Use invokeMethod to ensure UI updates happen on the main thread
-        // This is safe even if called from a worker thread
+        // Use AutoConnection to ensure immediate UI updates on both Mac and Linux
+        // since we are running synchronously on the main thread.
+        // QueuedConnection would wait until the blocking call finishes, freezing the UI on Mac.
         QMetaObject::invokeMethod(this, [this, current, total, message]() {
             onEnrollmentProgress(current, total, message);
-        }, Qt::QueuedConnection);
+        }, Qt::AutoConnection);
     });
 
     // Connect watcher - REMOVED as we are running on main thread now
