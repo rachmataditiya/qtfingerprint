@@ -1,5 +1,6 @@
 #include "mainwindow_app.h"
 #include "database_config_dialog.h"
+#include "identification_dialog.h"
 #include <QApplication>
 #include <QMessageBox>
 #include <QDateTime>
@@ -247,11 +248,17 @@ void MainWindowApp::setupUI()
     QHBoxLayout* verifyButtonsLayout = new QHBoxLayout();
     verifyButtonsLayout->setSpacing(10);
     
-    m_btnStartVerify = new QPushButton("Start Verification");
+    m_btnStartVerify = new QPushButton("Verify (1:1)");
     m_btnStartVerify->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #FF9800; color: white; font-weight: bold; } QPushButton:hover { background-color: #e68900; }");
     m_btnStartVerify->setEnabled(false);
     m_btnStartVerify->setMinimumHeight(40);
     verifyButtonsLayout->addWidget(m_btnStartVerify);
+    
+    m_btnIdentify = new QPushButton("Identify (1:N)");
+    m_btnIdentify->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #673AB7; color: white; font-weight: bold; } QPushButton:hover { background-color: #5E35B1; }");
+    m_btnIdentify->setEnabled(false);
+    m_btnIdentify->setMinimumHeight(40);
+    verifyButtonsLayout->addWidget(m_btnIdentify);
     
     m_btnCaptureVerify = new QPushButton("Capture & Verify");
     m_btnCaptureVerify->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #2196F3; color: white; font-weight: bold; } QPushButton:hover { background-color: #0b7dda; }");
@@ -357,6 +364,7 @@ void MainWindowApp::setupUI()
     connect(m_btnStartEnroll, &QPushButton::clicked, this, &MainWindowApp::onEnrollClicked);
     connect(m_btnCaptureEnroll, &QPushButton::clicked, this, &MainWindowApp::onCaptureEnrollSample);
     connect(m_btnStartVerify, &QPushButton::clicked, this, &MainWindowApp::onVerifyClicked);
+    connect(m_btnIdentify, &QPushButton::clicked, this, &MainWindowApp::onIdentifyClicked);
     connect(m_btnCaptureVerify, &QPushButton::clicked, this, &MainWindowApp::onCaptureVerifySample);
     connect(m_btnRefreshList, &QPushButton::clicked, this, &MainWindowApp::onRefreshUserList);
     connect(m_btnDeleteUser, &QPushButton::clicked, this, &MainWindowApp::onDeleteUserClicked);
@@ -434,6 +442,7 @@ void MainWindowApp::onInitializeClicked()
     m_btnInitialize->setEnabled(false);
     m_btnStartEnroll->setEnabled(true);
     m_btnStartVerify->setEnabled(true);
+    m_btnIdentify->setEnabled(true);
 }
 
 void MainWindowApp::onEnrollClicked()
@@ -622,6 +631,17 @@ void MainWindowApp::onCaptureEnrollFinished()
     processEnrollmentResult(m_enrollWatcher.result());
 }
 
+void MainWindowApp::onIdentifyClicked()
+{
+    if (!m_fpManager->isReaderOpen()) {
+        QMessageBox::warning(this, "Reader Not Ready", "Please initialize the reader first.");
+        return;
+    }
+    
+    IdentificationDialog dlg(m_fpManager, m_dbManager, this);
+    dlg.exec();
+}
+
 void MainWindowApp::onVerifyClicked()
 {
     if (m_userList->selectedItems().isEmpty()) {
@@ -783,6 +803,7 @@ void MainWindowApp::enableEnrollmentControls(bool enable)
 void MainWindowApp::enableVerificationControls(bool enable)
 {
     m_btnStartVerify->setEnabled(enable && m_fpManager->isReaderOpen());
+    m_btnIdentify->setEnabled(enable && m_fpManager->isReaderOpen());
     m_btnCaptureVerify->setEnabled(!enable);
 }
 

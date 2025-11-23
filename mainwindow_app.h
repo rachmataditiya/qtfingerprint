@@ -36,6 +36,7 @@ private slots:
     void onCaptureEnrollSample();
     void onCaptureEnrollFinished(); // New slot
     void onVerifyClicked();
+    void onIdentifyClicked(); // New slot for identification
     void onCaptureVerifySample();
     void onRefreshUserList();
     void onUserSelected(QListWidgetItem* item);
@@ -92,6 +93,7 @@ private:
     
     QGroupBox* m_verifyGroup;
     QPushButton* m_btnStartVerify;
+    QPushButton* m_btnIdentify; // New button
     QPushButton* m_btnCaptureVerify;
     QLabel* m_verifyResultLabel;
     QLabel* m_verifyScoreLabel;

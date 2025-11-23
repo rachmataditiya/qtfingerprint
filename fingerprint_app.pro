@@ -75,13 +75,15 @@ SOURCES += \
     mainwindow_app.cpp \
     database_manager.cpp \
     database_config_dialog.cpp \
-    migration_manager.cpp
+    migration_manager.cpp \
+    identification_dialog.cpp
 
 HEADERS += \
     mainwindow_app.h \
     database_manager.h \
     database_config_dialog.h \
-    migration_manager.h
+    migration_manager.h \
+    identification_dialog.h
 
 RESOURCES += migrations.qrc
 
