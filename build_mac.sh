@@ -22,6 +22,18 @@ brew list meson &>/dev/null || brew install meson
 brew list ninja &>/dev/null || brew install ninja
 brew list pkg-config &>/dev/null || brew install pkg-config
 
+# PostgreSQL support
+echo "Checking PostgreSQL support..."
+if ! brew list libpq &>/dev/null; then
+    echo "Installing libpq (PostgreSQL client library)..."
+    brew install libpq
+fi
+
+if ! brew list qt-postgresql &>/dev/null 2>&1; then
+    echo "Installing qt-postgresql (Qt PostgreSQL driver plugin)..."
+    brew install qt-postgresql
+fi
+
 # Detect qmake
 if [ -f "/opt/homebrew/opt/qt/bin/qmake" ]; then
     QMAKE_CMD="/opt/homebrew/opt/qt/bin/qmake"

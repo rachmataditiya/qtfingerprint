@@ -25,6 +25,17 @@ if command -v apt-get &> /dev/null; then
     check_dep qt6-base-dev || MISSING_DEPS+=("qt6-base-dev")
     check_dep libqt6sql6-sqlite || MISSING_DEPS+=("libqt6sql6-sqlite")
     check_dep build-essential || MISSING_DEPS+=("build-essential")
+    
+    # PostgreSQL support
+    check_dep libpq-dev || MISSING_DEPS+=("libpq-dev")
+    check_dep qt6-base-dev || MISSING_DEPS+=("qt6-base-dev") # Already checked, but needed for plugins
+    
+    # Check for PostgreSQL plugin
+    QT_PLUGIN_PATH=$(qmake6 -query QT_INSTALL_PLUGINS 2>/dev/null || qmake -query QT_INSTALL_PLUGINS 2>/dev/null || echo "")
+    if [ -n "$QT_PLUGIN_PATH" ] && [ ! -f "$QT_PLUGIN_PATH/sqldrivers/libqsqlpsql.so" ]; then
+        echo "Warning: PostgreSQL SQL driver not found. Installing qt6-base-dev should include it."
+        echo "If missing, you may need to install qt6-tools-dev or compile it manually."
+    fi
 
     if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
         echo "Installing missing dependencies: ${MISSING_DEPS[*]}"
