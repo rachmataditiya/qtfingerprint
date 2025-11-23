@@ -8,6 +8,9 @@
 #include <QVBoxLayout>
 #include <QTimer>
 
+#include <QProgressBar>
+#include <atomic>
+
 #include "database_manager.h"
 #include "digitalpersonalib/include/fingerprint_manager.h"
 
@@ -25,6 +28,7 @@ protected:
 
 private slots:
     void onScanClicked();
+    void onCancelClicked();
 
 private:
     void setupUI();
@@ -38,7 +42,9 @@ private:
     // UI Elements
     QLabel* m_statusLabel;
     QLabel* m_instructionLabel;
+    QProgressBar* m_progressBar;
     QPushButton* m_btnScan;
+    QPushButton* m_btnCancel;
     QPushButton* m_btnClose;
     
     // User Info Section
@@ -50,6 +56,7 @@ private:
     QLabel* m_avatarLabel;
 
     bool m_isScanning;
+    std::atomic<bool> m_cancelRequested;
 };
 
 #endif // IDENTIFICATION_DIALOG_H

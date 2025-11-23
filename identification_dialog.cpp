@@ -12,14 +12,16 @@ IdentificationDialog::IdentificationDialog(FingerprintManager* fpManager, Databa
     , m_fpManager(fpManager)
     , m_dbManager(dbManager)
     , m_isScanning(false)
+    , m_cancelRequested(false)
 {
     setupUI();
     setWindowTitle("Identify User");
-    setFixedSize(500, 450);
+    setFixedSize(500, 500);
 }
 
 IdentificationDialog::~IdentificationDialog()
 {
+    m_cancelRequested = true; // Ensure background threads stop
 }
 
 void IdentificationDialog::showEvent(QShowEvent *event)
@@ -59,6 +61,13 @@ void IdentificationDialog::setupUI()
     m_instructionLabel->setWordWrap(true);
     m_instructionLabel->setStyleSheet("QLabel { font-size: 14px; color: #666; }");
     headerLayout->addWidget(m_instructionLabel);
+
+    m_progressBar = new QProgressBar();
+    m_progressBar->setRange(0, 100);
+    m_progressBar->setValue(0);
+    m_progressBar->setTextVisible(true);
+    m_progressBar->setVisible(false);
+    headerLayout->addWidget(m_progressBar);
 
     mainLayout->addLayout(headerLayout);
 
@@ -135,12 +144,23 @@ void IdentificationDialog::setupUI()
     );
     mainLayout->addWidget(m_btnScan);
 
+    m_btnCancel = new QPushButton("Cancel");
+    m_btnCancel->setMinimumHeight(50);
+    m_btnCancel->setCursor(Qt::PointingHandCursor);
+    m_btnCancel->setStyleSheet(
+        "QPushButton { background-color: #f44336; color: white; font-size: 16px; font-weight: bold; border-radius: 5px; }"
+        "QPushButton:hover { background-color: #d32f2f; }"
+    );
+    m_btnCancel->setVisible(false);
+    mainLayout->addWidget(m_btnCancel);
+
     m_btnClose = new QPushButton("Close");
     m_btnClose->setCursor(Qt::PointingHandCursor);
     m_btnClose->setStyleSheet("QPushButton { border: none; color: #757575; font-size: 14px; text-decoration: underline; } QPushButton:hover { color: #424242; }");
     mainLayout->addWidget(m_btnClose);
 
     connect(m_btnScan, &QPushButton::clicked, this, &IdentificationDialog::onScanClicked);
+    connect(m_btnCancel, &QPushButton::clicked, this, &IdentificationDialog::onCancelClicked);
     connect(m_btnClose, &QPushButton::clicked, this, &QDialog::accept);
 }
 
@@ -165,15 +185,32 @@ void IdentificationDialog::clearUserInfo()
     m_userGroup->setVisible(false);
 }
 
+void IdentificationDialog::onCancelClicked()
+{
+    m_cancelRequested = true;
+    m_btnCancel->setEnabled(false);
+    m_btnCancel->setText("Stopping...");
+}
+
 void IdentificationDialog::onScanClicked()
 {
     if (m_isScanning) return;
 
     m_btnScan->setEnabled(false);
+    m_btnScan->setVisible(false);
     m_btnClose->setEnabled(false);
+    
+    m_btnCancel->setVisible(true);
+    m_btnCancel->setEnabled(true);
+    m_btnCancel->setText("Cancel");
+    m_cancelRequested = false;
+
     clearUserInfo();
-    updateStatus("Scanning...", "#2196F3");
-    m_instructionLabel->setText("Place your finger on the reader now...");
+    updateStatus("Preparing...", "#2196F3");
+    m_instructionLabel->setText("Loading user templates...");
+    
+    m_progressBar->setVisible(true);
+    m_progressBar->setValue(0);
 
     // Fetch all templates from DB
     QVector<User> users = m_dbManager->getAllUsers();
@@ -181,7 +218,10 @@ void IdentificationDialog::onScanClicked()
         updateStatus("No Users", "red");
         m_instructionLabel->setText("No users found in database to match against.");
         m_btnScan->setEnabled(true);
+        m_btnScan->setVisible(true);
+        m_btnCancel->setVisible(false);
         m_btnClose->setEnabled(true);
+        m_progressBar->setVisible(false);
         return;
     }
 
@@ -196,12 +236,33 @@ void IdentificationDialog::onScanClicked()
         updateStatus("No Templates", "red");
         m_instructionLabel->setText("Users found but no fingerprint data available.");
         m_btnScan->setEnabled(true);
+        m_btnScan->setVisible(true);
+        m_btnCancel->setVisible(false);
         m_btnClose->setEnabled(true);
+        m_progressBar->setVisible(false);
         return;
     }
 
     // Run identification
     m_isScanning = true;
+    updateStatus("Scanning...", "#2196F3");
+    m_instructionLabel->setText("Place your finger on the reader now...");
+
+    auto progressCb = [this](int current, int total) {
+        QMetaObject::invokeMethod(this, [this, current, total]() {
+            m_progressBar->setMaximum(total);
+            m_progressBar->setValue(current);
+            if (current < total) {
+                m_statusLabel->setText(QString("Loading Gallery: %1/%2").arg(current).arg(total));
+            } else {
+                m_statusLabel->setText("Identifying...");
+            }
+        }, Qt::QueuedConnection);
+    };
+
+    auto cancelCb = [this]() -> bool {
+        return m_cancelRequested.load();
+    };
     
     // Linux: Run synchronously on main thread to avoid threading issues with libfprint
     // macOS: Run in background thread to keep UI responsive
@@ -209,10 +270,14 @@ void IdentificationDialog::onScanClicked()
     QApplication::processEvents(); // Process any pending events before blocking
     
     int score = 0;
-    int userId = m_fpManager->identifyUser(templates, score);
+    // identifyUser handles processEvents internally now for gallery loading
+    int userId = m_fpManager->identifyUser(templates, score, progressCb, cancelCb);
     
     // Handle result immediately
-    if (userId != -1) {
+    if (m_cancelRequested) {
+        updateStatus("Cancelled", "#FF9800");
+        m_instructionLabel->setText("Identification cancelled by user.");
+    } else if (userId != -1) {
         // Match found!
         User user;
         if (m_dbManager->getUserById(userId, user)) {
@@ -231,7 +296,10 @@ void IdentificationDialog::onScanClicked()
 
     m_isScanning = false;
     m_btnScan->setEnabled(true);
+    m_btnScan->setVisible(true);
+    m_btnCancel->setVisible(false);
     m_btnClose->setEnabled(true);
+    m_progressBar->setVisible(false);
 #else
     QFutureWatcher<QPair<int, int>>* watcher = new QFutureWatcher<QPair<int, int>>(this);
     connect(watcher, &QFutureWatcher<QPair<int, int>>::finished, this, [this, watcher]() {
@@ -239,7 +307,10 @@ void IdentificationDialog::onScanClicked()
         int userId = result.first;
         int score = result.second;
         
-        if (userId != -1) {
+        if (m_cancelRequested) {
+            updateStatus("Cancelled", "#FF9800");
+            m_instructionLabel->setText("Identification cancelled by user.");
+        } else if (userId != -1) {
             // Match found!
             User user;
             if (m_dbManager->getUserById(userId, user)) {
@@ -258,13 +329,16 @@ void IdentificationDialog::onScanClicked()
 
         m_isScanning = false;
         m_btnScan->setEnabled(true);
+        m_btnScan->setVisible(true);
+        m_btnCancel->setVisible(false);
         m_btnClose->setEnabled(true);
+        m_progressBar->setVisible(false);
         watcher->deleteLater();
     });
 
-    QFuture<QPair<int, int>> future = QtConcurrent::run([this, templates]() {
+    QFuture<QPair<int, int>> future = QtConcurrent::run([this, templates, progressCb, cancelCb]() {
         int score = 0;
-        int userId = m_fpManager->identifyUser(templates, score);
+        int userId = m_fpManager->identifyUser(templates, score, progressCb, cancelCb);
         return QPair<int, int>(userId, score);
     });
 
