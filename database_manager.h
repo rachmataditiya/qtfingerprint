@@ -26,8 +26,12 @@ public:
     ~DatabaseManager();
 
     bool initialize(const DatabaseConfigDialog::Config& config);
+    void close(); // Close connection
     bool isOpen() const;
     QString getLastError() const { return m_lastError; }
+
+    // Migration
+    bool runMigrations(); // Explicitly run migrations
 
     // User operations
     bool addUser(const QString& name, const QString& email, const QByteArray& fingerprintTemplate, int& userId);

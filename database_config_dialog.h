@@ -27,6 +27,9 @@ public:
     static void saveConfig(const Config& config);
     static bool hasConfig();
 
+signals:
+    void runMigrationsRequested();
+
 private slots:
     void onTypeChanged(const QString& type);
     void onBrowseClicked();
@@ -43,6 +46,7 @@ private:
     QPushButton* m_browseBtn;
     QLabel* m_statusLabel;
     QPushButton* m_saveBtn;
+    QPushButton* m_migrateBtn; // Manual migration button
     class QStackedWidget* m_settingsStack;
     QLineEdit* m_pgNameEdit; // Separate edit for PG database name
     

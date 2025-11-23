@@ -41,6 +41,8 @@ private slots:
     void onUserSelected(QListWidgetItem* item);
     void onDeleteUserClicked();
     void onClearLog();
+    void onConfigClicked(); // Show database configuration
+    void onRunMigration(); // Handle manual migration request
 
 private:
     void setupUI();
@@ -51,6 +53,7 @@ private:
     void enableVerificationControls(bool enable);
     void onEnrollmentProgress(int current, int total, QString message);
     void processEnrollmentResult(int result);
+    void reinitDatabase(); // Helper to re-initialize database
 
     // DigitalPersona Library instance
     FingerprintManager* m_fpManager;
@@ -97,6 +100,7 @@ private:
     QListWidget* m_userList;
     QPushButton* m_btnRefreshList;
     QPushButton* m_btnDeleteUser;
+    QPushButton* m_btnConfig; // Database config button
     QLabel* m_userCountLabel;
     
     QTextEdit* m_logText;

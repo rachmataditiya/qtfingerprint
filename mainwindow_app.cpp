@@ -329,6 +329,11 @@ void MainWindowApp::setupUI()
     logLayout->setSpacing(8);
     logLayout->setContentsMargins(15, 15, 15, 15);
     
+    m_btnConfig = new QPushButton("⚙️ Database Config");
+    m_btnConfig->setCursor(Qt::PointingHandCursor);
+    m_btnConfig->setStyleSheet("QPushButton { padding: 6px; font-size: 11px; background-color: #607d8b; color: white; border-radius: 3px; } QPushButton:hover { background-color: #546e7a; }");
+    logLayout->addWidget(m_btnConfig);
+    
     m_logText = new QTextEdit();
     m_logText->setReadOnly(true);
     m_logText->setMinimumHeight(180);
@@ -356,7 +361,50 @@ void MainWindowApp::setupUI()
     connect(m_btnRefreshList, &QPushButton::clicked, this, &MainWindowApp::onRefreshUserList);
     connect(m_btnDeleteUser, &QPushButton::clicked, this, &MainWindowApp::onDeleteUserClicked);
     connect(m_btnClearLog, &QPushButton::clicked, this, &MainWindowApp::onClearLog);
+    connect(m_btnConfig, &QPushButton::clicked, this, &MainWindowApp::onConfigClicked);
     connect(m_userList, &QListWidget::itemClicked, this, &MainWindowApp::onUserSelected);
+}
+
+void MainWindowApp::onConfigClicked()
+{
+    DatabaseConfigDialog dlg(this);
+    
+    // Connect migration request from dialog to our handler
+    connect(&dlg, &DatabaseConfigDialog::runMigrationsRequested, this, &MainWindowApp::onRunMigration);
+    
+    if (dlg.exec() == QDialog::Accepted) {
+        // Config saved, re-initialize
+        reinitDatabase();
+    }
+}
+
+void MainWindowApp::onRunMigration()
+{
+    log("Executing manual database migration...");
+    if (m_dbManager->runMigrations()) {
+        log("✓ Migrations completed successfully.");
+        QMessageBox::information(this, "Migrations", "Database migrations completed successfully.");
+        updateUserList();
+    } else {
+        log(QString("❌ Migration failed: %1").arg(m_dbManager->getLastError()));
+        QMessageBox::critical(this, "Migration Error", m_dbManager->getLastError());
+    }
+}
+
+void MainWindowApp::reinitDatabase()
+{
+    log("Re-initializing database connection...");
+    DatabaseConfigDialog::Config config = DatabaseConfigDialog::loadConfig();
+    
+    if (m_dbManager->initialize(config)) {
+        log("✓ Database re-initialized successfully.");
+        updateUserList();
+        updateStatus("Database Connected", false);
+    } else {
+        log(QString("❌ Database init failed: %1").arg(m_dbManager->getLastError()));
+        updateStatus("Database Connection Failed", true);
+        QMessageBox::critical(this, "Database Error", "Failed to re-initialize database.\n" + m_dbManager->getLastError());
+    }
 }
 
 void MainWindowApp::onInitializeClicked()

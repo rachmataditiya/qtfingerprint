@@ -16,50 +16,62 @@ DatabaseManager::DatabaseManager(QObject* parent)
 
 DatabaseManager::~DatabaseManager()
 {
+    close();
+}
+
+void DatabaseManager::close()
+{
     if (m_db.isOpen()) {
         m_db.close();
+    }
+    
+    QString connName = m_db.connectionName();
+    m_db = QSqlDatabase(); // Release internal pointer
+    
+    if (!connName.isEmpty() && QSqlDatabase::contains(connName)) {
+        QSqlDatabase::removeDatabase(connName);
     }
 }
 
 bool DatabaseManager::initialize(const DatabaseConfigDialog::Config& config)
 {
-    if (QSqlDatabase::contains("qt_sql_default_connection")) {
-        m_db = QSqlDatabase::database("qt_sql_default_connection");
-    } else {
-        if (config.type == "SQLITE") {
-            // Robust Path Logic:
-            // 1. If absolute, use it.
-            // 2. If relative, prepend AppDataLocation.
-            QString dbPath = config.name;
-            QFileInfo fi(dbPath);
-            if (fi.isRelative()) {
-                 QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-                 QDir dir(dataPath);
-                 if (!dir.exists()) dir.mkpath(".");
-                 dbPath = dir.filePath(dbPath);
-                 qDebug() << "Resolved relative SQLite path to:" << dbPath;
-            }
+    // Close existing connection if any
+    close();
 
-            // Create directory if needed
-            QFileInfo finalFi(dbPath);
-            QDir finalDir = finalFi.absoluteDir();
-            if (!finalDir.exists()) {
-                if (!finalDir.mkpath(".")) {
-                    setError(QString("Failed to create database directory: %1").arg(finalDir.path()));
-                    return false;
-                }
-            }
-            
-            m_db = QSqlDatabase::addDatabase("QSQLITE");
-            m_db.setDatabaseName(dbPath);
-        } else {
-            m_db = QSqlDatabase::addDatabase("QPSQL");
-            m_db.setHostName(config.host);
-            m_db.setPort(config.port);
-            m_db.setDatabaseName(config.name);
-            m_db.setUserName(config.user);
-            m_db.setPassword(config.password);
+    // Re-establish connection
+    if (config.type == "SQLITE") {
+        // Robust Path Logic:
+        // 1. If absolute, use it.
+        // 2. If relative, prepend AppDataLocation.
+        QString dbPath = config.name;
+        QFileInfo fi(dbPath);
+        if (fi.isRelative()) {
+             QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+             QDir dir(dataPath);
+             if (!dir.exists()) dir.mkpath(".");
+             dbPath = dir.filePath(dbPath);
+             qDebug() << "Resolved relative SQLite path to:" << dbPath;
         }
+
+        // Create directory if needed
+        QFileInfo finalFi(dbPath);
+        QDir finalDir = finalFi.absoluteDir();
+        if (!finalDir.exists()) {
+            if (!finalDir.mkpath(".")) {
+                setError(QString("Failed to create database directory: %1").arg(finalDir.path()));
+                return false;
+            }
+        }
+        
+        m_db = QSqlDatabase::addDatabase("QSQLITE");
+        m_db.setDatabaseName(dbPath);
+    } else {
+        m_db = QSqlDatabase::addDatabase("QPSQL");
+        m_db.setHostName(config.host);
+        m_db.setPort(config.port);
+        m_db.setDatabaseName(config.name);
+        m_db.setUserName(config.user);
+        m_db.setPassword(config.password);
     }
 
     if (!m_db.open()) {
@@ -67,18 +79,39 @@ bool DatabaseManager::initialize(const DatabaseConfigDialog::Config& config)
         return false;
     }
 
-    // Run Migrations
-    QString migrationDir = (config.type == "SQLITE") ? ":/migrations/sqlite" : "migrations/postgresql";
-    // Note: Postgres migrations are not in qrc yet, but user only gave structure.
-    // For now assume sqlite is primary or folder exists if using postgres.
+    // Run Migrations automatically
+    if (!runMigrations()) {
+        return false;
+    }
+
+    qDebug() << "Database initialized successfully";
+    return true;
+}
+
+bool DatabaseManager::runMigrations()
+{
+    if (!isOpen()) {
+        setError("Database not open");
+        return false;
+    }
+
+    // Determine migration dir based on driver
+    QString driver = m_db.driverName();
+    QString migrationDir;
+    
+    if (driver == "QSQLITE") {
+        migrationDir = ":/migrations/sqlite";
+    } else {
+        migrationDir = ":/migrations/postgresql";
+    }
     
     MigrationManager migrator(m_db, migrationDir);
     if (!migrator.migrate()) {
         setError(QString("Migration failed: %1").arg(migrator.getLastError()));
         return false;
     }
-
-    qDebug() << "Database initialized successfully";
+    
+    qDebug() << "Migrations executed successfully";
     return true;
 }
 
