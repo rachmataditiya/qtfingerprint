@@ -2,6 +2,7 @@
     <qresource prefix="/">
         <file>migrations/sqlite/001_init.sql</file>
         <file>migrations/sqlite/002_add_updated_at.sql</file>
+        <file>migrations/postgresql/001_init.sql</file>
+        <file>migrations/postgresql/002_add_updated_at.sql</file>
     </qresource>
 </RCC>
-
