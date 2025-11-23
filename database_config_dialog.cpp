@@ -26,12 +26,26 @@ DatabaseConfigDialog::DatabaseConfigDialog(QWidget *parent)
     if (hasConfig()) {
         Config cfg = loadConfig();
         m_typeCombo->setCurrentText(cfg.type);
-        m_hostEdit->setText(cfg.host);
-        m_portEdit->setText(QString::number(cfg.port));
-        m_nameEdit->setText(cfg.name);
-        m_pgNameEdit->setText(cfg.name); // Ensure PG name is also set if type matches
-        m_userEdit->setText(cfg.user);
-        m_passEdit->setText(cfg.password);
+        
+        // Set Postgres Defaults (or loaded values if type matches)
+        if (cfg.type == "POSTGRESQL") {
+            m_hostEdit->setText(cfg.host);
+            m_portEdit->setText(QString::number(cfg.port));
+            m_pgNameEdit->setText(cfg.name);
+            m_userEdit->setText(cfg.user);
+            m_passEdit->setText(cfg.password);
+        } else {
+             // Load stored PG settings if available, otherwise defaults
+             QSettings settings("Arkana", "FingerprintApp");
+             m_hostEdit->setText(settings.value("DB/Postgres/Host", "localhost").toString());
+             m_portEdit->setText(QString::number(settings.value("DB/Postgres/Port", 5432).toInt()));
+             m_pgNameEdit->setText(settings.value("DB/Postgres/Name", "fingerprint").toString());
+             m_userEdit->setText(settings.value("DB/Postgres/User", "postgres").toString());
+             m_passEdit->setText(settings.value("DB/Postgres/Password", "").toString());
+             
+             m_nameEdit->setText(cfg.name); // Set SQLite path
+        }
+
     } else {
         // Set default secure path for SQLite
         QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
@@ -207,6 +221,14 @@ void DatabaseConfigDialog::onTypeChanged(const QString& type)
         }
     } else {
         m_settingsStack->setCurrentIndex(1);
+        // Ensure fields are not empty or garbage
+        if (m_portEdit->text().toInt() <= 0 || m_portEdit->text().toInt() > 65535) {
+            m_portEdit->setText("5432");
+        }
+        if (m_pgNameEdit->text().contains("/") || m_pgNameEdit->text().endsWith(".db")) {
+             // Reset if it looks like a file path
+             m_pgNameEdit->setText("fingerprint");
+        }
     }
     m_statusLabel->clear();
 }
@@ -298,11 +320,26 @@ void DatabaseConfigDialog::saveConfig(const Config& config)
 {
     QSettings settings("Arkana", "FingerprintApp");
     settings.setValue("DB/Type", config.type);
-    settings.setValue("DB/Host", config.host);
-    settings.setValue("DB/Port", config.port);
-    settings.setValue("DB/Name", config.name);
-    settings.setValue("DB/User", config.user);
-    settings.setValue("DB/Password", config.password);
+    
+    if (config.type == "SQLITE") {
+        settings.setValue("DB/SQLite/Path", config.name);
+        // Maintain legacy key for backward compatibility or generic access
+        settings.setValue("DB/Name", config.name); 
+    } else {
+        settings.setValue("DB/Postgres/Host", config.host);
+        settings.setValue("DB/Postgres/Port", config.port);
+        settings.setValue("DB/Postgres/Name", config.name);
+        settings.setValue("DB/Postgres/User", config.user);
+        settings.setValue("DB/Postgres/Password", config.password);
+        
+        // Also save to generic keys for active config
+        settings.setValue("DB/Host", config.host);
+        settings.setValue("DB/Port", config.port);
+        settings.setValue("DB/Name", config.name);
+        settings.setValue("DB/User", config.user);
+        settings.setValue("DB/Password", config.password);
+    }
+    
     settings.setValue("DB/Configured", true);
 }
 
