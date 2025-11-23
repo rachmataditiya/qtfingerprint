@@ -245,8 +245,13 @@ void IdentificationDialog::onScanClicked()
 
     // Run identification
     m_isScanning = true;
+    m_progressBar->setVisible(true); // Force visible immediately
+    m_progressBar->setValue(0);
     updateStatus("Scanning...", "#2196F3");
     m_instructionLabel->setText("Place your finger on the reader now...");
+
+    // Force UI update before heavy task
+    QApplication::processEvents();
 
     auto progressCb = [this](int current, int total) {
         QMetaObject::invokeMethod(this, [this, current, total]() {
