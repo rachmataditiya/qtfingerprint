@@ -811,6 +811,11 @@ void MainWindowApp::onEnrollmentProgress(int current, int total, QString message
     // Show in preview label (center the image)
     m_enrollImagePreview->setPixmap(QPixmap::fromImage(previewImage));
     
+    // Force immediate repaint of widgets to ensure visual responsiveness on macOS
+    m_enrollProgress->repaint();
+    m_enrollStatusLabel->repaint();
+    m_enrollImagePreview->repaint();
+
     // Process events to update UI
     QApplication::processEvents();
 }
