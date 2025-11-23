@@ -98,12 +98,12 @@ class MainActivity : AppCompatActivity() {
             isInitialized = true
             updateStatus("Reader initialized successfully", false)
             enableControls(true)
-            // Note: loadUsers() requires API server - comment out for UI demo
-            // loadUsers()
+            loadUsers() // Load users from API server
         } else {
             updateStatus("Fingerprint hardware not available (Demo mode - UI only)", false)
             // Enable controls anyway for UI demo
             enableControls(true)
+            loadUsers() // Still try to load users even in demo mode
         }
         
         binding.btnInitialize.isEnabled = true

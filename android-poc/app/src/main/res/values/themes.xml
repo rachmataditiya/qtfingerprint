@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.FingerprintPoC" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+    <style name="Theme.FingerprintPoC" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Primary brand color. -->
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryVariant">@color/primary_dark</item>
@@ -11,6 +11,8 @@
         <item name="colorOnSecondary">@android:color/black</item>
         <!-- Status bar color. -->
         <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
+        <!-- Window background -->
+        <item name="android:windowBackground">@color/background</item>
         <!-- Customize your theme here. -->
     </style>
 </resources>

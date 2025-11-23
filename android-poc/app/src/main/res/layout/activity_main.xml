@@ -1,245 +1,322 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:orientation="horizontal"
+    android:padding="16dp"
+    android:background="#F5F5F5">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center_horizontal">
+    <!-- Left Panel: Controls & Actions -->
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="0.4"
+        android:layout_marginEnd="16dp"
+        android:fillViewport="true">
 
-        <!-- Status Label -->
-        <TextView
-            android:id="@+id/statusLabel"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="16dp"
-            android:text="Status: Ready"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:background="#E0F7FA"
-            android:layout_marginBottom="16dp" />
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
 
-        <!-- Reader Initialization -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:cardElevation="4dp">
-
-            <LinearLayout
+            <!-- Status Bar -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="1. Reader Initialization"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="8dp" />
-
-                <Button
-                    android:id="@+id/btnInitialize"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Initialize Reader" />
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Enrollment Section -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:cardElevation="4dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="2. Enrollment (Registration)"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="8dp" />
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/editEnrollName"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="Name"
-                        android:inputType="textPersonName" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/editEnrollEmail"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="Email (optional)"
-                        android:inputType="textEmailAddress" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <Button
-                    android:id="@+id/btnStartEnroll"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Start Enrollment"
-                    android:layout_marginBottom="8dp"
-                    android:enabled="false" />
-
-                <ProgressBar
-                    android:id="@+id/enrollProgress"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/enrollStatusLabel"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text=""
-                    android:textSize="12sp"
-                    android:layout_marginTop="8dp" />
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Verification & Identification -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:cardElevation="4dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="3. Verification &amp; Identification"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:id="@+id/selectedUserName"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="No user selected"
-                    android:textSize="14sp"
-                    android:layout_marginBottom="8dp" />
-
-                <Button
-                    android:id="@+id/btnStartVerify"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Start Verification"
-                    android:layout_marginBottom="8dp"
-                    android:enabled="false" />
-
-                <Button
-                    android:id="@+id/btnIdentify"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Identify User"
-                    android:layout_marginBottom="8dp"
-                    android:enabled="false" />
-
-                <TextView
-                    android:id="@+id/verifyResultLabel"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text=""
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- User List -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:cardElevation="4dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:layout_marginBottom="16dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="#E3F2FD">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="8dp">
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
                     <TextView
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="4. User List"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
+                        android:text="📱 Status"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
 
-                    <Button
-                        android:id="@+id/btnRefreshList"
-                        android:layout_width="wrap_content"
+                    <TextView
+                        android:id="@+id/statusLabel"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Refresh" />
+                        android:text="Ready - Tap 'Initialize Reader' to begin"
+                        android:textSize="14sp"
+                        android:textColor="#424242" />
                 </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Reader Initialization -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="1️⃣ Reader Initialization"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnInitialize"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Initialize Reader"
+                        android:textSize="16sp"
+                        android:padding="16dp"
+                        app:cornerRadius="8dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Enrollment Section -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="2️⃣ Enrollment (Registration)"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="16dp" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Name"
+                        app:boxCornerRadiusTopStart="8dp"
+                        app:boxCornerRadiusTopEnd="8dp"
+                        app:boxCornerRadiusBottomStart="8dp"
+                        app:boxCornerRadiusBottomEnd="8dp">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editEnrollName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textPersonName"
+                            android:textSize="16sp" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        android:hint="Email (optional)"
+                        app:boxCornerRadiusTopStart="8dp"
+                        app:boxCornerRadiusTopEnd="8dp"
+                        app:boxCornerRadiusBottomStart="8dp"
+                        app:boxCornerRadiusBottomEnd="8dp">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editEnrollEmail"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textEmailAddress"
+                            android:textSize="16sp" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnStartEnroll"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Start Enrollment"
+                        android:textSize="16sp"
+                        android:padding="16dp"
+                        android:layout_marginBottom="12dp"
+                        android:enabled="false"
+                        app:cornerRadius="8dp" />
+
+                    <ProgressBar
+                        android:id="@+id/enrollProgress"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:progressTint="#2196F3" />
+
+                    <TextView
+                        android:id="@+id/enrollStatusLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textSize="12sp"
+                        android:textColor="#757575"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="20dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Verification & Identification -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardElevation="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="3️⃣ Verification &amp; Identification"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="16dp" />
+
+                    <TextView
+                        android:id="@+id/selectedUserName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="No user selected"
+                        android:textSize="14sp"
+                        android:textColor="#757575"
+                        android:padding="12dp"
+                        android:background="#F5F5F5"
+                        android:layout_marginBottom="12dp"
+                        android:textStyle="italic" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnStartVerify"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🔍 Start Verification"
+                        android:textSize="16sp"
+                        android:padding="16dp"
+                        android:layout_marginBottom="12dp"
+                        android:enabled="false"
+                        app:cornerRadius="8dp"
+                        style="@style/Widget.Material3.Button.OutlinedButton" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnIdentify"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🔎 Identify User"
+                        android:textSize="16sp"
+                        android:padding="16dp"
+                        android:layout_marginBottom="12dp"
+                        android:enabled="false"
+                        app:cornerRadius="8dp" />
+
+                    <TextView
+                        android:id="@+id/verifyResultLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:padding="12dp"
+                        android:background="#E8F5E9"
+                        android:visibility="gone"
+                        android:minHeight="40dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Right Panel: User List -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="0.6"
+        app:cardElevation="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="16dp">
 
                 <TextView
-                    android:id="@+id/userCountLabel"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Total users: 0"
-                    android:textSize="12sp"
-                    android:layout_marginBottom="8dp" />
+                    android:layout_weight="1"
+                    android:text="👥 User List"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recyclerViewUsers"
-                    android:layout_width="match_parent"
-                    android:layout_height="200dp"
-                    android:layout_marginBottom="8dp" />
-
-                <Button
-                    android:id="@+id/btnDeleteUser"
-                    android:layout_width="match_parent"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRefreshList"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Delete Selected User"
-                    android:enabled="false" />
-
+                    android:text="🔄 Refresh"
+                    android:textSize="14sp"
+                    app:icon="@android:drawable/ic_menu_revert"
+                    app:iconGravity="textStart"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    app:cornerRadius="8dp" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-    </LinearLayout>
-</ScrollView>
+            <TextView
+                android:id="@+id/userCountLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Total users: 0"
+                android:textSize="14sp"
+                android:textColor="#757575"
+                android:layout_marginBottom="16dp" />
 
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerViewUsers"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:padding="4dp"
+                android:scrollbars="vertical" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDeleteUser"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🗑️ Delete Selected User"
+                android:textSize="16sp"
+                android:padding="16dp"
+                android:layout_marginTop="16dp"
+                android:enabled="false"
+                app:cornerRadius="8dp"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                app:strokeColor="#F44336" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+</LinearLayout>
