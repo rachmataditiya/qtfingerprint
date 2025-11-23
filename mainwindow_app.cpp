@@ -32,8 +32,8 @@ MainWindowApp::MainWindowApp(QWidget *parent)
         }, Qt::QueuedConnection);
     });
 
-    // Connect watcher
-    connect(&m_enrollWatcher, &QFutureWatcher<int>::finished, this, &MainWindowApp::onCaptureEnrollFinished);
+    // Connect watcher - REMOVED as we are running on main thread now
+    // connect(&m_enrollWatcher, &QFutureWatcher<int>::finished, this, &MainWindowApp::onCaptureEnrollFinished);
 
     // Initialize database with configuration dialog
     if (!DatabaseConfigDialog::hasConfig()) {
@@ -86,9 +86,11 @@ MainWindowApp::~MainWindowApp()
 void MainWindowApp::closeEvent(QCloseEvent *event)
 {
     // Ensure thread is done
+    /* 
     if (m_enrollWatcher.isRunning()) {
         m_enrollWatcher.waitForFinished();
     }
+    */
     
     if (m_fpManager) {
         log("Application closing, cleaning up...");
@@ -454,19 +456,12 @@ void MainWindowApp::onCaptureEnrollSample()
     m_enrollStatusLabel->setText("Place your finger on the reader. You will scan 5 times...");
     log("=== ENROLLMENT: Starting capture sequence ===");
     
-    // Run in background thread to keep UI responsive
-    QFuture<int> future = QtConcurrent::run([this]() {
-        int quality;
-        // We write to members here, which is safe because we read them only after future finishes
-        return m_fpManager->addEnrollmentSample(m_tempEnrollMessage, quality, &m_tempEnrollImage);
-    });
-    m_enrollWatcher.setFuture(future);
-}
-
-void MainWindowApp::onCaptureEnrollFinished()
-{
-    int result = m_enrollWatcher.result();
-    QString message = m_tempEnrollMessage;
+    QApplication::processEvents();
+    
+    QString message;
+    int quality;
+    QImage image;
+    int result = m_fpManager->addEnrollmentSample(message, quality, &image);
     
     if (result < 0) {
         log(QString("ERROR: %1").arg(m_fpManager->getLastError()));
@@ -552,6 +547,11 @@ void MainWindowApp::onCaptureEnrollFinished()
         // If result is 0 (more scans needed), re-enable the capture button
          m_btnCaptureEnroll->setEnabled(true);
     }
+}
+
+void MainWindowApp::onCaptureEnrollFinished()
+{
+    // Unused now
 }
 
 void MainWindowApp::onVerifyClicked()
