@@ -99,6 +99,37 @@ make
 echo "========================================"
 echo "Build Complete!"
 echo "Run with: ./bin/FingerprintApp"
-echo "Note: Ensure you have permissions to access the fingerprint reader (udev rules)."
 echo "========================================"
+
+# Check USB permissions setup
+echo ""
+echo "Checking USB permissions setup..."
+NEED_SETUP=false
+
+# Check if user is in plugdev group
+if ! groups | grep -q plugdev; then
+    echo "⚠ Warning: User not in plugdev group."
+    NEED_SETUP=true
+fi
+
+# Check if udev rules exist
+if [ ! -f "/etc/udev/rules.d/99-fingerprint-reader.rules" ]; then
+    echo "⚠ Warning: USB udev rules not found."
+    NEED_SETUP=true
+fi
+
+if [ "$NEED_SETUP" = true ]; then
+    echo ""
+    echo "⚠ USB permissions not configured!"
+    echo "Please run the USB permissions setup script:"
+    echo "  ./setup_usb_permissions.sh"
+    echo ""
+    echo "After running the script, you may need to:"
+    echo "  - Log out and log back in (for group membership)"
+    echo "  - Unplug and replug your fingerprint reader"
+    echo ""
+else
+    echo "✓ USB permissions appear to be configured."
+fi
+echo ""
 
