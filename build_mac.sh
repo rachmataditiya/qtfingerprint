@@ -5,6 +5,23 @@ echo "========================================"
 echo "   Building FingerprintApp for macOS"
 echo "========================================"
 
+# Check for Homebrew
+if ! command -v brew &> /dev/null; then
+    echo "Error: Homebrew not found. Please install it first."
+    exit 1
+fi
+
+# Install Dependencies
+echo "Checking dependencies..."
+brew list qt &>/dev/null || brew install qt
+brew list libusb &>/dev/null || brew install libusb
+brew list libgusb &>/dev/null || brew install libgusb
+brew list pixman &>/dev/null || brew install pixman
+brew list glib &>/dev/null || brew install glib
+brew list meson &>/dev/null || brew install meson
+brew list ninja &>/dev/null || brew install ninja
+brew list pkg-config &>/dev/null || brew install pkg-config
+
 # Detect qmake
 if [ -f "/opt/homebrew/opt/qt/bin/qmake" ]; then
     QMAKE_CMD="/opt/homebrew/opt/qt/bin/qmake"
