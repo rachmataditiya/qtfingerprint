@@ -200,9 +200,39 @@ void IdentificationDialog::onScanClicked()
         return;
     }
 
-    // Run identification in background thread
+    // Run identification
     m_isScanning = true;
     
+    // Linux: Run synchronously on main thread to avoid threading issues with libfprint
+    // macOS: Run in background thread to keep UI responsive
+#ifdef Q_OS_LINUX
+    QApplication::processEvents(); // Process any pending events before blocking
+    
+    int score = 0;
+    int userId = m_fpManager->identifyUser(templates, score);
+    
+    // Handle result immediately
+    if (userId != -1) {
+        // Match found!
+        User user;
+        if (m_dbManager->getUserById(userId, user)) {
+            updateStatus("Match Found!", "#4CAF50");
+            m_instructionLabel->setText("User identified successfully.");
+            showUserInfo(user, score);
+        } else {
+            updateStatus("User Error", "#F44336");
+            m_instructionLabel->setText("Match found but failed to load user details.");
+        }
+    } else {
+        // No match
+        updateStatus("No Match", "#F44336");
+        m_instructionLabel->setText("Fingerprint scan successful, but no matching user found.");
+    }
+
+    m_isScanning = false;
+    m_btnScan->setEnabled(true);
+    m_btnClose->setEnabled(true);
+#else
     QFutureWatcher<QPair<int, int>>* watcher = new QFutureWatcher<QPair<int, int>>(this);
     connect(watcher, &QFutureWatcher<QPair<int, int>>::finished, this, [this, watcher]() {
         QPair<int, int> result = watcher->result();
@@ -239,5 +269,6 @@ void IdentificationDialog::onScanClicked()
     });
 
     watcher->setFuture(future);
+#endif
 }
 
