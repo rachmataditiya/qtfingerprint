@@ -10,6 +10,7 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QCoreApplication>
+#include <QApplication>
 #include <QGroupBox>
 #include <QStackedWidget>
 #include <QStyle>
@@ -217,7 +218,7 @@ void DatabaseConfigDialog::onTestClicked()
     
     m_statusLabel->setText("Testing connection...");
     m_statusLabel->setStyleSheet("color: blue;");
-    QApplication::processEvents();
+    QCoreApplication::processEvents();
     
     if (type == "SQLITE") {
         db = QSqlDatabase::addDatabase("QSQLITE", "TEST_CONN");
