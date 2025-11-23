@@ -250,6 +250,7 @@ void IdentificationDialog::onScanClicked()
 
     auto progressCb = [this](int current, int total) {
         QMetaObject::invokeMethod(this, [this, current, total]() {
+            m_progressBar->setVisible(true); // Ensure visible
             m_progressBar->setMaximum(total);
             m_progressBar->setValue(current);
             if (current < total) {
