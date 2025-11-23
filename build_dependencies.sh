@@ -7,12 +7,25 @@ if [ -f "/opt/homebrew/opt/qt/bin/qmake" ]; then
     QMAKE_CMD="/opt/homebrew/opt/qt/bin/qmake"
 elif command -v qmake6 &> /dev/null; then
     QMAKE_CMD="qmake6"
-elif [ -f "/opt/homebrew/opt/qt@5/bin/qmake" ]; then
-    QMAKE_CMD="/opt/homebrew/opt/qt@5/bin/qmake"
+elif [ -f "/usr/local/opt/qt/bin/qmake" ]; then
+    QMAKE_CMD="/usr/local/opt/qt/bin/qmake"
 elif command -v qmake &> /dev/null; then
-    QMAKE_CMD="qmake"
+    # Check if default qmake is qt6
+    VER=$(qmake -query QT_VERSION)
+    if [[ "$VER" == 6.* ]]; then
+        QMAKE_CMD="qmake"
+    else
+        echo "Warning: Default qmake is version $VER. Looking for Qt 6..."
+        # Try to find qt6 specifically
+        if [ -d "/opt/homebrew/opt/qt@6/bin" ]; then
+             QMAKE_CMD="/opt/homebrew/opt/qt@6/bin/qmake"
+        else
+             echo "Error: Qt 6 not found. Please install qt (brew install qt)"
+             exit 1
+        fi
+    fi
 else
-    echo "Error: qmake/qmake6 not found. Please install Qt."
+    echo "Error: qmake/qmake6 not found. Please install Qt 6."
     exit 1
 fi
 
