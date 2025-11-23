@@ -64,6 +64,13 @@ void MigrationManager::init()
     // Check if table exists
     QSqlQuery query(m_db);
     if (!query.exec("SELECT 1 FROM migrations LIMIT 1")) {
+        // Check if the error is because the table doesn't exist
+        // Note: This check is simplistic. For more robust checks, query information_schema or sqlite_master.
+        // However, exec() returning false is a good enough indicator here to try creating it.
+        
+        // Explicitly clear error state if possible or just proceed to create
+        // Actually, if the error is "relation does not exist", we create the table.
+        
         if (!query.exec("CREATE TABLE migrations (name VARCHAR(255) NOT NULL DEFAULT '')")) {
             m_lastError = "Failed to create migrations table: " + query.lastError().text();
             return;
