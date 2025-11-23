@@ -179,7 +179,7 @@ void DatabaseConfigDialog::setupUI()
     m_saveBtn->setStyleSheet("QPushButton { padding: 8px 20px; border: none; border-radius: 4px; background-color: #007bff; color: white; font-weight: bold; } QPushButton:hover { background-color: #0056b3; }");
     connect(m_saveBtn, &QPushButton::clicked, this, &DatabaseConfigDialog::onSaveClicked);
     
-    m_migrateBtn = new QPushButton("🛠️ Run Migrations");
+    m_migrateBtn = new QPushButton("Run Migrations");
     m_migrateBtn->setCursor(Qt::PointingHandCursor);
     m_migrateBtn->setStyleSheet("QPushButton { padding: 8px 15px; border: 1px solid #ccc; border-radius: 4px; background-color: #ffc107; color: #000; font-weight: bold; } QPushButton:hover { background-color: #e0a800; }");
     // Only show migration button if config exists, or maybe always show but warn?

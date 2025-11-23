@@ -329,7 +329,7 @@ void MainWindowApp::setupUI()
     logLayout->setSpacing(8);
     logLayout->setContentsMargins(15, 15, 15, 15);
     
-    m_btnConfig = new QPushButton("⚙️ Database Config");
+    m_btnConfig = new QPushButton("Database Config");
     m_btnConfig->setCursor(Qt::PointingHandCursor);
     m_btnConfig->setStyleSheet("QPushButton { padding: 6px; font-size: 11px; background-color: #607d8b; color: white; border-radius: 3px; } QPushButton:hover { background-color: #546e7a; }");
     logLayout->addWidget(m_btnConfig);
