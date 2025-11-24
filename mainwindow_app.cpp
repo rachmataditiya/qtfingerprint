@@ -1,5 +1,6 @@
 #include "mainwindow_app.h"
 #include "backend_config_dialog.h"
+#include "fingerprint_utils.h"
 #include <QApplication>
 #include <QMessageBox>
 #include <QDateTime>
@@ -148,9 +149,9 @@ void MainWindowApp::setupUI()
     m_enrollFingerSelect->setMinimumHeight(30);
     m_enrollFingerSelect->setEditable(false);
     
-    // Populate finger options
-    QStringList fingers = {"Right Index", "Right Middle", "Right Ring", "Right Pinky", "Right Thumb",
-                           "Left Index", "Left Middle", "Left Ring", "Left Pinky", "Left Thumb"};
+    // Populate finger options - using display format (same order as Android enum)
+    QStringList fingers = {"Left Thumb", "Left Index", "Left Middle", "Left Ring", "Left Pinky",
+                           "Right Thumb", "Right Index", "Right Middle", "Right Ring", "Right Pinky"};
     m_enrollFingerSelect->addItems(fingers);
     m_enrollFingerSelect->setCurrentText("Right Index"); // Default
     
@@ -163,6 +164,18 @@ void MainWindowApp::setupUI()
     connect(m_enrollUserSelect, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
         if (index >= 0) {
             int userId = m_enrollUserSelect->itemData(index).toInt();
+            
+            // Process events first to ensure UI is responsive before making async call
+            // This prevents hang when clicking dropdown after verify operation
+            QApplication::processEvents();
+            
+            // Clear finger selection temporarily while loading
+            m_enrollFingerSelect->blockSignals(true);
+            m_enrollFingerSelect->clear();
+            m_enrollFingerSelect->addItem("Loading...");
+            m_enrollFingerSelect->setEnabled(false);
+            m_enrollFingerSelect->blockSignals(false);
+            
             m_backendClient->getUserFingers(userId);
         }
     });
@@ -576,7 +589,13 @@ void MainWindowApp::processEnrollmentResult(int result)
         
         // Store template directly (user already exists)
         log(QString("Storing template for user ID: %1, finger: %2").arg(m_enrollmentUserId).arg(m_pendingEnrollmentFinger));
-        m_backendClient->storeTemplate(m_enrollmentUserId, templateData, m_pendingEnrollmentFinger);
+        // Convert display format to backend enum format (matching Android Finger.kt)
+        QString backendFinger = fingerToBackendFormat(m_pendingEnrollmentFinger);
+        if (backendFinger.isEmpty()) {
+            log(QString("Warning: Invalid finger format '%1', using as-is").arg(m_pendingEnrollmentFinger));
+            backendFinger = m_pendingEnrollmentFinger;
+        }
+        m_backendClient->storeTemplate(m_enrollmentUserId, templateData, backendFinger);
         
         log("Cleaning up enrollment session...");
         m_fpManager->cancelEnrollment();
@@ -814,10 +833,111 @@ void MainWindowApp::onUserCreated(int userId)
 
 void MainWindowApp::onTemplateStored(int userId, const QString& finger)
 {
-    log(QString("Template stored for user %1, finger %2").arg(userId).arg(finger));
-    m_enrollStatusLabel->setText(QString("✓ Enrollment Complete: User %1, Finger %2").arg(userId).arg(finger));
-    m_enrollStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; }");
+    // Convert backend format to display format
+    QString displayFinger = fingerFromBackendFormat(finger);
+    log(QString("Template stored for user %1, finger %2").arg(userId).arg(displayFinger));
+    
+    // Update status label with success message
+    m_enrollStatusLabel->setText(QString("✓ Enrollment Complete: User %1, Finger %2").arg(userId).arg(displayFinger));
+    m_enrollStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; font-size: 12px; }");
+    
+    // Update progress bar to 100% (5/5 scans)
+    m_enrollProgress->setValue(5);
+    m_enrollProgress->setFormat("5/5 scans (100%)");
+    
+    // Create success indicator preview image
+    QImage successImage(180, 180, QImage::Format_RGB888);
+    successImage.fill(QColor(250, 250, 250));
+    QPainter painter(&successImage);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    
+    int centerX = 90;
+    int centerY = 90;
+    
+    // Draw success background gradient (green)
+    QRadialGradient gradient(centerX, centerY, 80);
+    gradient.setColorAt(0, QColor(200, 255, 200));
+    gradient.setColorAt(1, QColor(150, 230, 150));
+    painter.fillRect(successImage.rect(), gradient);
+    
+    // Draw complete fingerprint pattern (all 5 scans)
+    painter.setPen(QPen(QColor(60, 100, 180, 200), 2.5));
+    for (int i = 0; i < 5; ++i) {
+        int alpha = 150 + (i * 20);
+        if (alpha > 255) alpha = 255;
+        painter.setPen(QPen(QColor(60, 100, 180, alpha), 2.5));
+        
+        // Draw multiple curved lines to simulate fingerprint ridges
+        for (int j = 0; j < 8; ++j) {
+            int radius = 15 + (i * 12) + (j * 3);
+            QRect ellipseRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+            
+            // Draw partial arcs for more realistic fingerprint pattern
+            int startAngle = (j * 15 + i * 10) * 16; // Qt uses 1/16th of a degree
+            int spanAngle = (120 + j * 10) * 16;
+            painter.drawArc(ellipseRect, startAngle, spanAngle);
+        }
+    }
+    
+    // Draw center point
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(33, 150, 243, 255));
+    painter.drawEllipse(QPoint(centerX, centerY), 5, 5);
+    
+    // Draw success badge (green with checkmark)
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(76, 175, 80, 240));
+    QRect badgeRect(10, 10, 160, 40);
+    painter.drawRoundedRect(badgeRect, 8, 8);
+    
+    // Draw checkmark
+    painter.setPen(QPen(QColor(255, 255, 255), 4));
+    painter.setFont(QFont("Arial", 16, QFont::Bold));
+    QPoint checkStart(centerX - 20, centerY - 5);
+    QPoint checkMid(centerX - 5, centerY + 10);
+    QPoint checkEnd(centerX + 20, centerY - 15);
+    painter.drawLine(checkStart, checkMid);
+    painter.drawLine(checkMid, checkEnd);
+    
+    // Draw "Complete!" text
+    painter.setPen(QColor(255, 255, 255));
+    painter.setFont(QFont("Arial", 12, QFont::Bold));
+    painter.drawText(badgeRect, Qt::AlignCenter, "✓ Complete!");
+    
+    // Draw full progress indicator at bottom (green)
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(76, 175, 80, 255));
+    QRect progressRect(0, 170, 180, 10);
+    painter.drawRect(progressRect);
+    
+    // Update preview with success image
+    m_enrollImagePreview->setPixmap(QPixmap::fromImage(successImage));
+    
+    // Force immediate repaint
+    m_enrollProgress->repaint();
+    m_enrollStatusLabel->repaint();
+    m_enrollImagePreview->repaint();
+    
+    // Reset enrollment state
+    m_enrollmentInProgress = false;
+    m_enrollmentSampleCount = 0;
+    enableEnrollmentControls(true);
+    
+    // Refresh finger list to remove enrolled finger
+    if (m_enrollUserSelect->currentIndex() >= 0) {
+        int currentUserId = m_enrollUserSelect->itemData(m_enrollUserSelect->currentIndex()).toInt();
+        if (currentUserId == userId) {
+            // Reload fingers for current user to update the list
+            m_backendClient->getUserFingers(userId);
+        }
+    }
+    
+    // Refresh user list to update finger count
     m_backendClient->listUsers();
+    
+    // Process events to ensure UI updates immediately
+    QApplication::processEvents();
 }
 
 void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
@@ -832,7 +952,8 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
     }
     
     // Handle template loaded for verification
-    log(QString("Template loaded for user %1, finger %2").arg(tmpl.userId).arg(tmpl.finger));
+    QString displayFinger = fingerFromBackendFormat(tmpl.finger);
+    log(QString("Template loaded for user %1, finger %2").arg(tmpl.userId).arg(displayFinger));
     
     // Add to verification templates list
     m_verificationTemplates.append(tmpl);
@@ -840,8 +961,9 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
     // Check if we need to load more templates
     if (!m_remainingVerificationFingers.isEmpty()) {
         // Load next finger template
-        QString nextFinger = m_remainingVerificationFingers.takeFirst();
-        log(QString("Loading template for finger: %1").arg(nextFinger));
+        QString nextFinger = m_remainingVerificationFingers.takeFirst(); // Backend format
+        QString displayFinger = fingerFromBackendFormat(nextFinger);
+        log(QString("Loading template for finger: %1").arg(displayFinger));
         m_verifyResultLabel->setText(QString("Loading template %1/%2...").arg(m_verificationTemplates.size() + 1).arg(m_verificationTemplates.size() + m_remainingVerificationFingers.size() + 1));
         QApplication::processEvents();
         m_backendClient->loadTemplate(m_verificationUserId, nextFinger);
@@ -892,7 +1014,8 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
         // Found a match!
         foundMatch = true;
         matchedTemplate = m_verificationTemplates[matchedIndex];
-        log(QString("VERIFICATION MATCH: finger %1, score %2%").arg(matchedTemplate.finger).arg(score));
+        QString displayFinger = fingerFromBackendFormat(matchedTemplate.finger);
+        log(QString("VERIFICATION MATCH: finger %1, score %2%").arg(displayFinger).arg(score));
     } else {
         // No match found, but log what we tried
         log(QString("VERIFICATION: No match found after trying %1 finger(s), best score: %2%").arg(m_verificationTemplates.size()).arg(score));
@@ -906,10 +1029,12 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
         m_verificationUserName;
     
     if (foundMatch) {
+        // Convert backend format to display format
+        QString displayFinger = fingerFromBackendFormat(matchedTemplate.finger);
         m_verifyScoreLabel->setText(QString("Match Score: %1%").arg(bestScore));
-        m_verifyResultLabel->setText(QString("✓ MATCH: %1 (%2)").arg(userName).arg(matchedTemplate.finger));
+        m_verifyResultLabel->setText(QString("✓ MATCH: %1 (%2)").arg(userName).arg(displayFinger));
         m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: #2e7d32; padding: 10px; font-weight: bold; font-size: 14px; }");
-        log(QString("VERIFICATION SUCCESS: %1 (finger: %2, score: %3%)").arg(userName).arg(matchedTemplate.finger).arg(bestScore));
+        log(QString("VERIFICATION SUCCESS: %1 (finger: %2, score: %3%)").arg(userName).arg(displayFinger).arg(bestScore));
     } else {
         m_verifyScoreLabel->setText(QString("Best Score: %1%").arg(bestScore));
         m_verifyResultLabel->setText(QString("✗ NO MATCH"));
@@ -917,10 +1042,15 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
         log(QString("VERIFICATION FAILED: Tried %1 finger(s), best score: %2%").arg(m_verificationTemplates.size()).arg(bestScore));
     }
     
-    // Cleanup
+    // Cleanup - ensure UI is responsive after verification
     m_verificationTemplates.clear();
     m_remainingVerificationFingers.clear();
     m_btnStartVerify->setEnabled(true);
+    
+    // Process events to ensure UI is responsive after verification
+    // This prevents hang when clicking dropdown enrollment after verify
+    QApplication::processEvents();
+    
     log("=== VERIFICATION COMPLETED ===");
 }
 
@@ -929,21 +1059,62 @@ void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& finger
     // Check if this is for enrollment (user selected in enrollment dropdown)
     if (m_enrollUserSelect->currentData().toInt() == userId) {
         // Update finger selection - disable already enrolled fingers
-        log(QString("User %1 has %2 enrolled finger(s): %3").arg(userId).arg(fingers.size()).arg(fingers.join(", ")));
+        // Convert to display format for logging
+        QStringList displayFingersForLog;
+        for (const QString& backendFinger : fingers) {
+            displayFingersForLog.append(fingerFromBackendFormat(backendFinger));
+        }
+        log(QString("User %1 has %2 enrolled finger(s): %3").arg(userId).arg(displayFingersForLog.size()).arg(displayFingersForLog.join(", ")));
         
-        // Check if currently selected finger is already enrolled
+        // Convert backend format fingers to display format for comparison
+        QStringList displayFingers;
+        for (const QString& backendFinger : fingers) {
+            QString displayFinger = fingerFromBackendFormat(backendFinger);
+            displayFingers.append(displayFinger);
+        }
+        
+        // Remove enrolled fingers from combo box instead of just selecting different one
         QString currentFinger = m_enrollFingerSelect->currentText().replace(" (enrolled)", "");
-        if (fingers.contains(currentFinger)) {
-            // Select first non-enrolled finger
-            QStringList allFingers = {"Right Index", "Right Middle", "Right Ring", "Right Pinky", "Right Thumb",
-                                      "Left Index", "Left Middle", "Left Ring", "Left Pinky", "Left Thumb"};
-            for (const QString& finger : allFingers) {
-                if (!fingers.contains(finger)) {
-                    m_enrollFingerSelect->setCurrentText(finger);
-                    break;
-                }
+        
+        // Block signals temporarily to avoid triggering getUserFingers multiple times
+        m_enrollFingerSelect->blockSignals(true);
+        
+        // Remove all items first
+        m_enrollFingerSelect->clear();
+        
+        // Rebuild list with only non-enrolled fingers
+        QStringList allFingers = {"Left Thumb", "Left Index", "Left Middle", "Left Ring", "Left Pinky",
+                                  "Right Thumb", "Right Index", "Right Middle", "Right Ring", "Right Pinky"};
+        for (const QString& finger : allFingers) {
+            if (!displayFingers.contains(finger)) {
+                m_enrollFingerSelect->addItem(finger);
             }
         }
+        
+        // Restore current selection if still available, otherwise select first available
+        if (m_enrollFingerSelect->findText(currentFinger) >= 0) {
+            m_enrollFingerSelect->setCurrentText(currentFinger);
+        } else if (m_enrollFingerSelect->count() > 0) {
+            m_enrollFingerSelect->setCurrentIndex(0);
+        }
+        
+        // Re-enable signals and combo box
+        m_enrollFingerSelect->setEnabled(m_enrollFingerSelect->count() > 0);
+        m_enrollFingerSelect->blockSignals(false);
+        
+        if (m_enrollFingerSelect->count() == 0) {
+            m_enrollStatusLabel->setText("All fingers already enrolled for this user");
+            m_enrollStatusLabel->setStyleSheet("QLabel { color: #856404; font-weight: bold; }");
+            m_btnStartEnroll->setEnabled(false);
+        } else {
+            m_enrollStatusLabel->setText("");
+            if (m_fpManager->isReaderOpen()) {
+                m_btnStartEnroll->setEnabled(true);
+            }
+        }
+        
+        // Process events to ensure UI updates immediately
+        QApplication::processEvents();
     }
     
     // Check if this is for verification
@@ -1037,6 +1208,11 @@ void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>&
         m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
         m_verifyScoreLabel->setText(error);
         m_btnIdentify->setEnabled(true);
+        
+        // Process events to ensure UI is responsive after identification error
+        // This prevents hang when clicking dropdown enrollment after identify
+        QApplication::processEvents();
+        
         return;
     }
     
@@ -1046,7 +1222,8 @@ void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>&
         int matchedUserId = matchedTemplate.userId;
         QString matchedUserName = matchedTemplate.userName.isEmpty() ? 
             QString("User %1").arg(matchedUserId) : matchedTemplate.userName;
-        QString matchedFinger = matchedTemplate.finger;
+        // Convert backend format to display format
+        QString matchedFinger = fingerFromBackendFormat(matchedTemplate.finger);
         
         log(QString("✓ IDENTIFICATION SUCCESS: %1 (User ID: %2, Finger: %3, Score: %4%)")
             .arg(matchedUserName).arg(matchedUserId).arg(matchedFinger).arg(score));
@@ -1063,6 +1240,10 @@ void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>&
     
     m_btnIdentify->setEnabled(true);
     log("=== IDENTIFICATION COMPLETED ===");
+    
+    // Process events to ensure UI is responsive after identification
+    // This prevents hang when clicking dropdown enrollment after identify
+    QApplication::processEvents();
 }
 
 void MainWindowApp::onBackendError(const QString& errorMessage)

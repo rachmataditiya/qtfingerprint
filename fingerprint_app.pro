@@ -140,12 +140,14 @@ SOURCES += \
     main_app.cpp \
     mainwindow_app.cpp \
     backend_client.cpp \
-    backend_config_dialog.cpp
+    backend_config_dialog.cpp \
+    fingerprint_utils.cpp
 
 HEADERS += \
     mainwindow_app.h \
     backend_client.h \
-    backend_config_dialog.h
+    backend_config_dialog.h \
+    fingerprint_utils.h
 
 RESOURCES += migrations.qrc
 
