@@ -675,22 +675,29 @@ void MainWindowApp::onVerifyClicked()
     // Reset verification state
     m_verificationTemplates.clear();
     m_remainingVerificationFingers.clear();
+    m_verificationWaitingForFingers = false;
     
-    // Load all templates for this user (all fingers)
-    // We'll verify against all of them
+    // According to fingerprint-sdk, verify should:
+    // 1. Load template (most recent if finger not specified)
+    // 2. Capture fingerprint
+    // 3. Match
+    
+    // But user wants to verify against ALL fingers, so we need to:
+    // 1. Get user fingers first
+    // 2. Load all templates for all fingers
+    // 3. Use identifyUser to match against all templates (capture once)
+    
     log("Getting user fingers...");
-    
-    // Set a flag to track if we've received response
     m_verificationWaitingForFingers = true;
-    
     m_backendClient->getUserFingers(m_verificationUserId);
     
-    // Fallback: if getUserFingers doesn't respond in 3 seconds, load template directly
-    QTimer::singleShot(3000, this, [this]() {
+    // Fallback: if getUserFingers doesn't respond in 5 seconds, try load template directly
+    QTimer::singleShot(5000, this, [this]() {
         if (m_verificationWaitingForFingers && m_verificationTemplates.isEmpty()) {
-            log("getUserFingers timeout, loading template directly (most recent)");
+            log("getUserFingers timeout after 5s, trying to load most recent template");
             m_verificationWaitingForFingers = false;
-            m_remainingVerificationFingers.clear(); // Clear to indicate we're loading single template
+            m_remainingVerificationFingers.clear();
+            // Try loading most recent template as fallback
             m_backendClient->loadTemplate(m_verificationUserId, ""); // Empty = most recent
         }
     });
