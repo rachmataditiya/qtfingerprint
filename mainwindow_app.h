@@ -112,7 +112,6 @@ private:
     QGroupBox* m_verifyGroup;
     QPushButton* m_btnStartVerify;
     QPushButton* m_btnIdentify; // New button
-    QPushButton* m_btnCaptureVerify;
     QLabel* m_verifyResultLabel;
     QLabel* m_verifyScoreLabel;
     

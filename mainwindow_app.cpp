@@ -369,7 +369,6 @@ void MainWindowApp::setupUI()
     connect(m_btnCaptureEnroll, &QPushButton::clicked, this, &MainWindowApp::onCaptureEnrollSample);
     connect(m_btnStartVerify, &QPushButton::clicked, this, &MainWindowApp::onVerifyClicked);
     connect(m_btnIdentify, &QPushButton::clicked, this, &MainWindowApp::onIdentifyClicked);
-    connect(m_btnCaptureVerify, &QPushButton::clicked, this, &MainWindowApp::onCaptureVerifySample);
     connect(m_btnRefreshList, &QPushButton::clicked, this, &MainWindowApp::onRefreshUserList);
     connect(m_btnDeleteUser, &QPushButton::clicked, this, &MainWindowApp::onDeleteUserClicked);
     connect(m_btnClearLog, &QPushButton::clicked, this, &MainWindowApp::onClearLog);
