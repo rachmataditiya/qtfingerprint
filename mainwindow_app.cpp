@@ -640,9 +640,9 @@ void MainWindowApp::onVerifyClicked()
     m_verifyScoreLabel->setText("Please wait...");
     log(QString("Verification started for user ID: %1").arg(m_verificationUserId));
     
-    // Load template and verify immediately
-    QString finger = "Right Index"; // Default, can be enhanced with combobox
-    m_backendClient->loadTemplate(m_verificationUserId, finger);
+    // First, get user's fingers to know which finger to use
+    // If no fingers available, use empty string to get most recent
+    m_backendClient->getUserFingers(m_verificationUserId);
 }
 
 void MainWindowApp::onCaptureVerifySample()
@@ -808,7 +808,22 @@ void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& finger
 {
     if (userId == m_verificationUserId) {
         log(QString("User %1 has %2 registered finger(s)").arg(userId).arg(fingers.size()));
-        // Could populate combobox here if we add one
+        
+        if (fingers.isEmpty()) {
+            QMessageBox::warning(this, "No Fingerprints", 
+                QString("User %1 has no registered fingerprints. Please enroll a fingerprint first.")
+                .arg(m_verificationUserName.isEmpty() ? QString::number(userId) : m_verificationUserName));
+            m_btnStartVerify->setEnabled(true);
+            m_verifyResultLabel->setText("Result: No fingerprints");
+            m_verifyScoreLabel->setText("Score: -");
+            return;
+        }
+        
+        // Use first finger (or most recent if empty string is passed)
+        // Empty string will get the most recent template from backend
+        QString finger = fingers.first(); // Use first available finger
+        log(QString("Loading template for finger: %1").arg(finger));
+        m_backendClient->loadTemplate(m_verificationUserId, finger);
     }
 }
 

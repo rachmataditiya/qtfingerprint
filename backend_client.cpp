@@ -348,9 +348,37 @@ void BackendClient::handleTemplateStored(QNetworkReply* reply)
 
 void BackendClient::handleTemplateLoaded(QNetworkReply* reply)
 {
+    if (reply->error() != QNetworkReply::NoError) {
+        // Check for HTTP error codes
+        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (statusCode == 404) {
+            emit error("Template not found. Please enroll a fingerprint for this user first.");
+        } else {
+            emit error(QString("Failed to load template: %1").arg(reply->errorString()));
+        }
+        qDebug() << "BackendClient: Error loading template:" << reply->errorString() << "Status:" << statusCode;
+        return;
+    }
+
     QByteArray data = reply->readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    
+    if (parseError.error != QJsonParseError::NoError) {
+        emit error(QString("JSON parse error: %1").arg(parseError.errorString()));
+        qDebug() << "BackendClient: JSON parse error:" << parseError.errorString();
+        return;
+    }
+    
     QJsonObject obj = doc.object();
+    
+    // Check for error response
+    if (obj.contains("error")) {
+        QString errorMsg = obj["error"].toString();
+        emit error(QString("Template not found: %1").arg(errorMsg));
+        qDebug() << "BackendClient: Template not found:" << errorMsg;
+        return;
+    }
 
     BackendFingerprintTemplate tmpl;
     tmpl.userId = obj["user_id"].toInt();
@@ -358,6 +386,12 @@ void BackendClient::handleTemplateLoaded(QNetworkReply* reply)
     QString base64Template = obj["template"].toString();
     tmpl.templateData = QByteArray::fromBase64(base64Template.toUtf8());
     tmpl.createdAt = obj["created_at"].toString();
+
+    if (tmpl.templateData.isEmpty()) {
+        emit error("Template data is empty");
+        qDebug() << "BackendClient: Template data is empty";
+        return;
+    }
 
     emit templateLoaded(tmpl);
     qDebug() << "BackendClient: Template loaded for user" << tmpl.userId << "finger" << tmpl.finger;
