@@ -81,6 +81,8 @@ private:
     int m_verificationUserId;
     QString m_verificationUserName;
     QString m_verificationUserEmail;
+    QVector<BackendFingerprintTemplate> m_verificationTemplates; // All templates for verification
+    QStringList m_remainingVerificationFingers; // Remaining fingers to load
     
     // Threading
     QFutureWatcher<int> m_enrollWatcher;

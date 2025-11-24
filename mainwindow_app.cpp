@@ -637,14 +637,14 @@ void MainWindowApp::onVerifyClicked()
     }
     
     m_btnStartVerify->setEnabled(false);
-    m_verifyResultLabel->setText("Loading template...");
+    m_verifyResultLabel->setText("Loading templates...");
     m_verifyScoreLabel->setText("Please wait...");
     log(QString("Verification started for user ID: %1").arg(m_verificationUserId));
     
-    // Load template directly with empty finger (most recent) to avoid getting stuck
-    // Backend will return the most recent template if finger is empty
-    log("Loading most recent template...");
-    m_backendClient->loadTemplate(m_verificationUserId, ""); // Empty = most recent
+    // Load all templates for this user (all fingers)
+    // We'll verify against all of them
+    log("Loading all templates for user...");
+    m_backendClient->getUserFingers(m_verificationUserId);
 }
 
 void MainWindowApp::onCaptureVerifySample()
@@ -755,11 +755,28 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
     // Handle template loaded for verification
     log(QString("Template loaded for user %1, finger %2").arg(tmpl.userId).arg(tmpl.finger));
     
+    // Add to verification templates list
+    m_verificationTemplates.append(tmpl);
+    
+    // Check if we need to load more templates
+    if (!m_remainingVerificationFingers.isEmpty()) {
+        // Load next finger template
+        QString nextFinger = m_remainingVerificationFingers.takeFirst();
+        log(QString("Loading template for finger: %1").arg(nextFinger));
+        m_backendClient->loadTemplate(m_verificationUserId, nextFinger);
+        return; // Wait for next template to load
+    }
+    
+    // All templates loaded, now verify against all of them
+    log(QString("All %1 template(s) loaded. Starting verification...").arg(m_verificationTemplates.size()));
+    
     // Check if device is still open
     if (!m_fpManager->isReaderOpen()) {
         QMessageBox::critical(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
         m_btnStartVerify->setEnabled(true);
         m_btnCaptureVerify->setEnabled(false);
+        m_verificationTemplates.clear();
+        m_remainingVerificationFingers.clear();
         return;
     }
     
@@ -767,40 +784,55 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
     m_verifyScoreLabel->setText("Please wait...");
     QApplication::processEvents();
     
-    int score = 0;
-    bool matched = m_fpManager->verifyFingerprint(tmpl.templateData, score);
+    // Try to verify against all templates
+    // Capture fingerprint once and verify against all templates
+    bool foundMatch = false;
+    int bestScore = 0;
+    BackendFingerprintTemplate matchedTemplate;
     
-    if (!matched && score == 0) {
-        QString error = m_fpManager->getLastError();
-        log(QString("Verification error: %1").arg(error));
-        m_verifyResultLabel->setText("Result: ERROR");
-        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcccc; color: red; padding: 5px; font-weight: bold; }");
-        m_verifyScoreLabel->setText("Score: -");
-        QMessageBox::critical(this, "Verification Error", error);
-    } else {
-        m_verifyScoreLabel->setText(QString("Match Score: %1%").arg(score));
+    for (const BackendFingerprintTemplate& tmpl : m_verificationTemplates) {
+        int score = 0;
+        bool matched = m_fpManager->verifyFingerprint(tmpl.templateData, score);
         
-        // Use stored user info from onUserSelected
-        QString userName = m_verificationUserName.isEmpty() ? 
-            (tmpl.userName.isEmpty() ? QString("User %1").arg(tmpl.userId) : tmpl.userName) : 
-            m_verificationUserName;
+        log(QString("Verifying against finger %1: score=%2, matched=%3").arg(tmpl.finger).arg(score).arg(matched));
         
-        if (score >= 60) {
-            m_verifyResultLabel->setText(QString("MATCH: %1").arg(userName));
-            m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: green; padding: 10px; font-weight: bold; font-size: 14px; }");
-            log(QString("VERIFICATION SUCCESS: %1 (score: %2%)").arg(userName).arg(score));
-            QMessageBox::information(this, "Verification Success", 
-                QString("Fingerprint MATCHED!\n\nUser: %1\nFinger: %2\nScore: %3%").arg(userName).arg(tmpl.finger).arg(score));
-        } else {
-            m_verifyResultLabel->setText(QString("NO MATCH"));
-            m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
-            log(QString("VERIFICATION FAILED (score: %1%)").arg(score));
-            QMessageBox::warning(this, "Verification Failed", 
-                QString("Fingerprint does NOT match!\n\nExpected: %1\nScore: %2%")
-                    .arg(userName).arg(score));
+        if (matched && score >= 60) {
+            // Found a match!
+            foundMatch = true;
+            matchedTemplate = tmpl;
+            bestScore = score;
+            break; // Stop at first match
+        } else if (score > bestScore) {
+            // Keep track of best score even if not matched
+            bestScore = score;
         }
     }
     
+    // Use stored user info
+    QString userName = m_verificationUserName.isEmpty() ? 
+        QString("User %1").arg(m_verificationUserId) : 
+        m_verificationUserName;
+    
+    if (foundMatch) {
+        m_verifyScoreLabel->setText(QString("Match Score: %1%").arg(bestScore));
+        m_verifyResultLabel->setText(QString("MATCH: %1").arg(userName));
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: green; padding: 10px; font-weight: bold; font-size: 14px; }");
+        log(QString("VERIFICATION SUCCESS: %1 (finger: %2, score: %3%)").arg(userName).arg(matchedTemplate.finger).arg(bestScore));
+        QMessageBox::information(this, "Verification Success", 
+            QString("Fingerprint MATCHED!\n\nUser: %1\nFinger: %2\nScore: %3%").arg(userName).arg(matchedTemplate.finger).arg(bestScore));
+    } else {
+        m_verifyScoreLabel->setText(QString("Best Score: %1%").arg(bestScore));
+        m_verifyResultLabel->setText(QString("NO MATCH"));
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
+        log(QString("VERIFICATION FAILED: Tried %1 finger(s), best score: %2%").arg(m_verificationTemplates.size()).arg(bestScore));
+        QMessageBox::warning(this, "Verification Failed", 
+            QString("Fingerprint does NOT match any registered finger!\n\nUser: %1\nTried: %2 finger(s)\nBest Score: %3%")
+                .arg(userName).arg(m_verificationTemplates.size()).arg(bestScore));
+    }
+    
+    // Cleanup
+    m_verificationTemplates.clear();
+    m_remainingVerificationFingers.clear();
     m_btnStartVerify->setEnabled(true);
     m_btnCaptureVerify->setEnabled(false);
     log("=== VERIFICATION COMPLETED ===");
@@ -821,16 +853,23 @@ void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& finger
             return;
         }
         
-        // Use first finger (or most recent if empty string is passed)
-        // Empty string will get the most recent template from backend
-        QString finger = fingers.first(); // Use first available finger
-        log(QString("Loading template for finger: %1").arg(finger));
-        m_verifyResultLabel->setText(QString("Loading template for %1...").arg(finger));
+        // Load all templates for all fingers
+        // We'll verify against all of them
+        m_verificationTemplates.clear();
         
-        // Update status to show we're loading template (not stuck)
+        log(QString("Loading templates for %1 finger(s)...").arg(fingers.size()));
+        m_verifyResultLabel->setText(QString("Loading %1 template(s)...").arg(fingers.size()));
         QApplication::processEvents();
         
-        m_backendClient->loadTemplate(m_verificationUserId, finger);
+        // Load first template to start verification process
+        // We'll load others as needed
+        QString firstFinger = fingers.first();
+        log(QString("Loading template for finger: %1").arg(firstFinger));
+        m_backendClient->loadTemplate(m_verificationUserId, firstFinger);
+        
+        // Store remaining fingers to load
+        m_remainingVerificationFingers = fingers;
+        m_remainingVerificationFingers.removeFirst(); // Remove first one as we're loading it now
     }
 }
 
