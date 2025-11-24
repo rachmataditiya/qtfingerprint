@@ -46,9 +46,22 @@ public:
     bool openDevice(int deviceIndex = 0);
     
     /**
+     * @brief Set USB file descriptor from Android USB Host API
+     * This allows libusb to access USB device through Android's file descriptor
+     * @param fd File descriptor from UsbDeviceConnection.getFileDescriptor()
+     * @return true on success
+     */
+    bool setUsbFileDescriptor(int fd);
+    
+    /**
      * @brief Close device
      */
     void closeDevice();
+    
+    /**
+     * @brief Check if device is open
+     */
+    bool isDeviceOpen() const;
     
     /**
      * @brief Capture fingerprint template from device
@@ -84,6 +97,7 @@ private:
     FpContext* m_context;
     FpDevice* m_device;
     std::string m_lastError;
+    int m_usbFd; // USB file descriptor from Android
     
     void setError(const std::string& error);
 };

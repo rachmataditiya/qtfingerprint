@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <libusb.h>
 #include <gusb/gusb-device.h>
 #include <gusb/gusb-source.h>
 
@@ -107,5 +108,20 @@ g_usb_context_wait_for_replug(GUsbContext *self,
 			      GUsbDevice *device,
 			      guint timeout_ms,
 			      GError **error);
+
+/**
+ * g_usb_context_get_libusb_context:
+ * @self: a #GUsbContext
+ *
+ * Gets the internal libusb_context. This function is provided for
+ * Android integration where libusb needs direct access to the context
+ * for wrapping system file descriptors.
+ *
+ * Return value: (transfer none): the libusb_context
+ *
+ * Since: 0.5.0
+ **/
+libusb_context *
+g_usb_context_get_libusb_context(GUsbContext *self);
 
 G_END_DECLS

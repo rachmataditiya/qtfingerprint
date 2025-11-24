@@ -99,6 +99,7 @@ build_library() {
     local name=$1
     local url=$2
     local configure_args=$3
+    local force_rebuild=${4:-false}  # Optional: force rebuild even if .so exists
     
     echo ""
     echo "=========================================="
@@ -108,6 +109,25 @@ build_library() {
     BUILD_DIR="${SCRIPT_DIR}/build-android-${ARCH}"
     mkdir -p "$BUILD_DIR"
     cd "$BUILD_DIR"
+    
+    # Check if library already exists and source hasn't changed
+    if [ "$force_rebuild" != "true" ]; then
+        # Check if .so file exists
+        if [ -f "${ANDROID_PREFIX}/lib/lib${name}.so" ] || [ -f "${ANDROID_PREFIX}/lib/${name}.so" ]; then
+            SO_FILE=$(find "${ANDROID_PREFIX}/lib" -name "*${name}*.so" -type f | head -1)
+            if [ -n "$SO_FILE" ] && [ -d "$name" ]; then
+                # Check if source directory is newer than .so file
+                SO_MTIME=$(stat -f %m "$SO_FILE" 2>/dev/null || stat -c %Y "$SO_FILE" 2>/dev/null || echo 0)
+                SRC_MTIME=$(find "$name" -type f -name "*.c" -o -name "*.h" -o -name "*.cpp" | xargs stat -f %m 2>/dev/null | sort -rn | head -1 || \
+                           find "$name" -type f -name "*.c" -o -name "*.h" -o -name "*.cpp" | xargs stat -c %Y 2>/dev/null | sort -rn | head -1 || echo 0)
+                if [ "$SRC_MTIME" -le "$SO_MTIME" ]; then
+                    echo "✅ $name already built and up-to-date, skipping..."
+                    cd "$SCRIPT_DIR"
+                    return 0
+                fi
+            fi
+        fi
+    fi
     
     # Download and extract if needed
     if [ ! -d "$name" ]; then
@@ -127,9 +147,11 @@ build_library() {
     
     cd "$name"
     
-    # Clean previous build
-    if [ -f "Makefile" ]; then
-        make distclean || true
+    # Clean previous build only if forcing rebuild
+    if [ "$force_rebuild" = "true" ]; then
+        if [ -f "Makefile" ]; then
+            make distclean || true
+        fi
     fi
     
     # Configure
@@ -155,9 +177,14 @@ build_library() {
     elif [ -f "meson.build" ]; then
         # Use meson for meson-based projects
         MESON_BUILD_DIR="build-android"
-        rm -rf "$MESON_BUILD_DIR"
-        meson setup "$MESON_BUILD_DIR" \
-            --cross-file <(cat <<EOF
+        # Only remove build directory if forcing rebuild
+        if [ "$force_rebuild" = "true" ] || [ ! -d "$MESON_BUILD_DIR" ]; then
+            rm -rf "$MESON_BUILD_DIR"
+        fi
+        # Only reconfigure if build directory doesn't exist
+        if [ ! -d "$MESON_BUILD_DIR" ]; then
+            meson setup "$MESON_BUILD_DIR" \
+                --cross-file <(cat <<EOF
 [binaries]
 c = '${CC}'
 cpp = '${CXX}'
@@ -178,9 +205,10 @@ cpu = '${ARCH%%-*}'
 endian = 'little'
 EOF
 ) \
-            --prefix="${ANDROID_PREFIX}" \
-            -Ddefault_library=shared \
-            $configure_args
+                --prefix="${ANDROID_PREFIX}" \
+                -Ddefault_library=shared \
+                $configure_args
+        fi
         cd "$MESON_BUILD_DIR"
     else
         echo "Error: No configure script or meson.build found for $name"
@@ -215,8 +243,15 @@ EOF
             fi
         fi
     elif [ -f "build.ninja" ]; then
-        ninja
-        ninja install
+        # Only build if forcing rebuild or if .so doesn't exist
+        if [ "$force_rebuild" = "true" ] || [ ! -f "${ANDROID_PREFIX}/lib/lib${name}.so" ] && [ ! -f "${ANDROID_PREFIX}/lib/${name}.so" ]; then
+            ninja
+            ninja install
+        else
+            echo "Skipping ninja build (already built)..."
+            # Still run install in case headers changed
+            ninja install || true
+        fi
     else
         echo "Error: Build files not found for $name"
         exit 1

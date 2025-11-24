@@ -27,6 +27,16 @@
 #include "gusb-json-common.h"
 #include "gusb-util.h"
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#define ANDROID_LOG_TAG "libgusb-device"
+#define ANDROID_LOG(...) __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG, __VA_ARGS__)
+#define ANDROID_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG, __VA_ARGS__)
+#else
+#define ANDROID_LOG(...)
+#define ANDROID_LOGE(...)
+#endif
+
 /**
  * GUsbDevicePrivate:
  *
@@ -861,8 +871,114 @@ _g_usb_device_open_internal(GUsbDevice *self, GError **error)
 		return FALSE;
 	}
 
+#ifdef __ANDROID__
+	/* On Android, check if device was wrapped with libusb_wrap_sys_device */
+	/* If so, we need to get the handle from the wrapped device */
+	/* First, try to get the handle from GUsbContext's wrapped_handles hash table */
+	GUsbContext *context = priv->context;
+	libusb_device_handle *wrapped_handle = NULL;
+	
+	ANDROID_LOG("_g_usb_device_open_internal: Attempting to open device %p (VID:PID=%04x:%04x)", 
+	            priv->device, g_usb_device_get_vid(self), g_usb_device_get_pid(self));
+	
+	if (context) {
+		/* Access GUsbContextPrivate using the same method as in gusb-context.c */
+		/* We need to declare the struct and use g_type_instance_get_private */
+		extern GType g_usb_context_get_type(void);
+		typedef struct {
+			GMainContext *main_ctx;
+			GPtrArray *devices;
+			GPtrArray *devices_removed;
+			GHashTable *dict_usb_ids;
+			GHashTable *dict_replug;
+			GThread *thread_event;
+			gboolean done_enumerate;
+			volatile gint thread_event_run;
+			guint hotplug_poll_id;
+			guint hotplug_poll_interval;
+			int debug_level;
+			GUsbContextFlags flags;
+			libusb_context *ctx;
+			libusb_hotplug_callback_handle hotplug_id;
+			GPtrArray *idle_events;
+			GMutex idle_events_mutex;
+			guint idle_events_id;
+			GHashTable *wrapped_handles;
+		} GUsbContextPrivate;
+		
+		GUsbContextPrivate *ctx_priv = g_type_instance_get_private((GTypeInstance *)context, g_usb_context_get_type());
+		
+		if (ctx_priv) {
+			ANDROID_LOG("_g_usb_device_open_internal: Got context private data: %p", ctx_priv);
+			if (ctx_priv->wrapped_handles) {
+				guint hash_size = g_hash_table_size(ctx_priv->wrapped_handles);
+				ANDROID_LOG("_g_usb_device_open_internal: Hash table exists with %u entries", hash_size);
+				
+				/* Try direct lookup */
+				wrapped_handle = g_hash_table_lookup(ctx_priv->wrapped_handles, priv->device);
+				if (wrapped_handle) {
+					ANDROID_LOG("_g_usb_device_open_internal: ✓✓✓ Found wrapped handle %p for device %p", wrapped_handle, priv->device);
+					/* Use the wrapped handle directly */
+					priv->handle = wrapped_handle;
+					/* Increment reference count to prevent it from being freed */
+					libusb_ref_device(priv->device);
+					return TRUE;
+				} else {
+					ANDROID_LOG("_g_usb_device_open_internal: Device %p not found in hash table, iterating...", priv->device);
+					/* Try to find by VID:PID match if direct pointer lookup fails */
+					GHashTableIter iter;
+					gpointer key, value;
+					g_hash_table_iter_init(&iter, ctx_priv->wrapped_handles);
+					while (g_hash_table_iter_next(&iter, &key, &value)) {
+						libusb_device *stored_dev = (libusb_device *)key;
+						libusb_device_handle *stored_handle = (libusb_device_handle *)value;
+						
+						/* Compare by bus/address or VID/PID */
+						guint8 stored_bus = libusb_get_bus_number(stored_dev);
+						guint8 stored_addr = libusb_get_device_address(stored_dev);
+						guint8 current_bus = libusb_get_bus_number(priv->device);
+						guint8 current_addr = libusb_get_device_address(priv->device);
+						
+						struct libusb_device_descriptor stored_desc, current_desc;
+						libusb_get_device_descriptor(stored_dev, &stored_desc);
+						libusb_get_device_descriptor(priv->device, &current_desc);
+						
+						if ((stored_bus == current_bus && stored_addr == current_addr) ||
+						    (stored_desc.idVendor == current_desc.idVendor && stored_desc.idProduct == current_desc.idProduct)) {
+							ANDROID_LOG("_g_usb_device_open_internal: ✓✓✓ Found matching wrapped handle %p by VID:PID (%04x:%04x)", 
+							            stored_handle, current_desc.idVendor, current_desc.idProduct);
+							priv->handle = stored_handle;
+							libusb_ref_device(priv->device);
+							return TRUE;
+						}
+					}
+					ANDROID_LOG("_g_usb_device_open_internal: No matching wrapped handle found in hash table");
+				}
+			} else {
+				ANDROID_LOG("_g_usb_device_open_internal: Hash table is NULL");
+			}
+		} else {
+			ANDROID_LOG("_g_usb_device_open_internal: Failed to get context private data");
+		}
+	} else {
+		ANDROID_LOG("_g_usb_device_open_internal: Context is NULL");
+	}
+	
+	/* If no wrapped handle found, try regular open */
+	ANDROID_LOG("_g_usb_device_open_internal: No wrapped handle found, trying libusb_open...");
+	rc = libusb_open(priv->device, &priv->handle);
+	if (rc == LIBUSB_ERROR_ACCESS) {
+		ANDROID_LOGE("_g_usb_device_open_internal: libusb_open failed with ACCESS error - device may need to be wrapped");
+		g_set_error(error,
+			    G_USB_DEVICE_ERROR,
+			    G_USB_DEVICE_ERROR_INTERNAL,
+			    "Device access denied - device may need to be wrapped with Android USB file descriptor");
+		return FALSE;
+	}
+#else
 	/* open device */
 	rc = libusb_open(priv->device, &priv->handle);
+#endif
 	if (!g_usb_device_libusb_error_to_gerror(self, rc, error)) {
 		if (priv->handle != NULL)
 			libusb_close(priv->handle);

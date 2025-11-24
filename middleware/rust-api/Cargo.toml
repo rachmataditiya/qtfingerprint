@@ -35,8 +35,8 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 # Chrono for timestamps
 chrono = { version = "0.4", features = ["serde"] }
 
-# Hex encoding (fallback for base64)
-hex = "0.4"
+# Base64 encoding
+base64 = "0.22"
 
 # Build dependencies
 [build-dependencies]

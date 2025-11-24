@@ -130,6 +130,11 @@ public:
      */
     std::string getLastError() const { return m_lastError; }
     
+    /**
+     * @brief Get FingerprintCapture instance (for JNI access)
+     */
+    FingerprintCapture* getFingerprintCaptureInstance() const { return m_capture; }
+    
     // ========== Callbacks from JNI ==========
     void onEnrollmentProgress(int current, int total, const std::string& message);
     void onEnrollmentComplete(const std::vector<uint8_t>& templateData);

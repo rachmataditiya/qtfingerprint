@@ -118,11 +118,17 @@ if cc.has_header_symbol('libusb.h', 'libusb_get_port_number', dependencies: libu
 endif
 libjsonglib = dependency('json-glib-1.0', version: '>= 1.1.1')
 
+# Android logging library
+log_dep = cc.find_library('log', required: false)
+
 gusb_deps = [
   libgio,
   libusb,
   libjsonglib,
 ]
+if log_dep.found()
+  gusb_deps += [log_dep]
+endif
 
 if not get_option('introspection') and get_option('vapi')
   error('-Dvapi=true requires -Dintrospection=true')

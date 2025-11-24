@@ -23,11 +23,32 @@ class FingerprintManager(private val context: Context) {
     fun initialize(activity: FragmentActivity): Boolean {
         this.activity = activity
         
-        // Initialize libfprint via JNI
-        val initialized = FingerprintJNI.initialize(context)
+        // FingerprintJNI.initialize() should already be called from MainActivity
+        // before calling this method, so we just check if it's initialized
+        if (FingerprintJNI.nativeInstance == 0L) {
+            Log.e(TAG, "FingerprintJNI not initialized. Call FingerprintJNI.initialize() first.")
+            return false
+        }
+        
+        // Initialize libfprint via JNI (if not already initialized)
+        val initialized = FingerprintJNI.nativeInstance != 0L
         if (initialized) {
-            val deviceCount = FingerprintJNI.getDeviceCount()
-            if (deviceCount > 0) {
+            // Wait a bit for USB device enumeration (Android needs time to detect USB devices)
+            Thread.sleep(500)
+            
+            // Try multiple times to detect device (USB enumeration is async)
+            var deviceCount = 0
+            for (i in 0..3) {
+                deviceCount = FingerprintJNI.getDeviceCount()
+                if (deviceCount > 0) {
+                    break
+                }
+                Log.d(TAG, "Waiting for USB device detection... attempt ${i + 1}/4")
+                Thread.sleep(500)
+            }
+            
+            // Sanity check: device count should be reasonable (max 100 devices)
+            if (deviceCount > 0 && deviceCount <= 100) {
                 val opened = FingerprintJNI.openReader(activity)
                 if (opened) {
                     Log.i(TAG, "libfprint initialized successfully, device count: $deviceCount")
@@ -37,7 +58,11 @@ class FingerprintManager(private val context: Context) {
                     Log.e(TAG, "Failed to open fingerprint reader: ${FingerprintJNI.getLastError()}")
                 }
             } else {
-                Log.w(TAG, "No fingerprint devices found")
+                if (deviceCount > 100) {
+                    Log.e(TAG, "Invalid device count: $deviceCount (possible memory corruption)")
+                } else {
+                    Log.w(TAG, "No fingerprint devices found after ${4 * 500}ms wait")
+                }
             }
         } else {
             Log.e(TAG, "Failed to initialize libfprint: ${FingerprintJNI.getLastError()}")
@@ -130,6 +155,10 @@ class FingerprintManager(private val context: Context) {
     fun cancel() {
         Log.d(TAG, "Cancel called")
         FingerprintJNI.cancel()
+    }
+    
+    fun getLastError(): String {
+        return FingerprintJNI.getLastError()
     }
 }
 

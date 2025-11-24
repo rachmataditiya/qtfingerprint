@@ -1,5 +1,13 @@
 package com.arkana.fingerprintpoc
 
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.util.Base64
 import android.util.Log
@@ -11,25 +19,102 @@ import androidx.lifecycle.lifecycleScope
 import com.arkana.fingerprintpoc.api.ApiClient
 import com.arkana.fingerprintpoc.databinding.ActivityMainBinding
 import com.arkana.fingerprintpoc.models.UserResponse
+import com.arkana.libdigitalpersona.FingerprintJNI
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
     
     private lateinit var binding: ActivityMainBinding
     private lateinit var fingerprintManager: FingerprintManager
+    private lateinit var usbManager: UsbManager
+    private lateinit var userListAdapter: com.arkana.fingerprintpoc.adapter.UserListAdapter
     
     private var isInitialized = false
+    private var usbDevice: UsbDevice? = null
     private var selectedUserId: Int? = null
-    private var selectedUser: UserResponse? = null
+    
+    private val usbPermissionReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == "android.hardware.usb.action.USB_PERMISSION") {
+                synchronized(this) {
+                    val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                        device?.apply {
+                            Log.d("MainActivity", "USB permission granted for device: ${device.deviceName}")
+                            usbDevice = device
+                            // Now initialize libfprint after permission granted
+                            initializeLibfprint()
+                        }
+                    } else {
+                        Log.e("MainActivity", "USB permission denied for device: ${device?.deviceName}")
+                        runOnUiThread {
+                            updateStatus("USB permission denied", true)
+                            binding.btnInitialize.isEnabled = true
+                            binding.btnInitialize.text = "Initialize USB Device"
+                        }
+                    }
+                }
+            }
+        }
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
+        usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
         fingerprintManager = FingerprintManager(this)
         
+        // Register USB permission receiver
+        // For Android 13+ (API 33+), we need to specify RECEIVER_EXPORTED or RECEIVER_NOT_EXPORTED
+        val filter = IntentFilter("android.hardware.usb.action.USB_PERMISSION")
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(usbPermissionReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(usbPermissionReceiver, filter)
+        }
+        
         setupUI()
+        setupUserList()
+        
+        // Check if USB device was attached via intent
+        handleUsbIntent(intent)
+        
+        // Load user list on startup
+        loadUserList()
+    }
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleUsbIntent(intent)
+    }
+    
+    private fun handleUsbIntent(intent: Intent?) {
+        if (intent?.action == "android.hardware.usb.action.USB_DEVICE_ATTACHED") {
+            val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            device?.let {
+                Log.d("MainActivity", "USB device attached: ${it.deviceName}")
+                requestUsbPermission(it)
+            }
+        }
+    }
+    
+    private fun requestUsbPermission(device: UsbDevice) {
+        if (usbManager.hasPermission(device)) {
+            Log.d("MainActivity", "USB permission already granted")
+            usbDevice = device
+            initializeLibfprint()
+        } else {
+            Log.d("MainActivity", "Requesting USB permission for device: ${device.deviceName}")
+            val permissionIntent = PendingIntent.getBroadcast(
+                this, 0,
+                Intent("android.hardware.usb.action.USB_PERMISSION"),
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            usbManager.requestPermission(device, permissionIntent)
+        }
     }
     
     private fun setupUI() {
@@ -38,7 +123,7 @@ class MainActivity : AppCompatActivity() {
             initializeReader()
         }
         
-        // Verification button
+        // Verification button - use selected user from list
         binding.btnStartVerify.setOnClickListener {
             if (!isInitialized) {
                 Toast.makeText(this, "Please initialize USB device first", Toast.LENGTH_SHORT).show()
@@ -46,14 +131,11 @@ class MainActivity : AppCompatActivity() {
             }
             
             if (selectedUserId == null) {
-                showUserSelectionDialog { userId ->
-                    selectedUserId = userId
-                    loadUserInfo(userId)
-                    startVerification(userId)
-                }
-            } else {
-                startVerification(selectedUserId!!)
+                Toast.makeText(this, "Please select a user from the list first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
+            
+            startVerification(selectedUserId!!)
         }
         
         // Identification button
@@ -67,15 +149,123 @@ class MainActivity : AppCompatActivity() {
         
         // Initial state
         updateStatus("Ready - Initialize USB device to begin", false)
-        updateUserInfo(null)
         enableControls(false)
         hideResult()
     }
     
     private fun initializeReader() {
-        binding.btnInitialize.isEnabled = false
-        binding.btnInitialize.text = "Initializing..."
-        updateStatus("Initializing USB fingerprint device...", false)
+        try {
+            binding.btnInitialize.isEnabled = false
+            binding.btnInitialize.text = "Initializing..."
+            updateStatus("Checking USB devices...", false)
+            
+            // Find USB fingerprint device
+            val deviceList = usbManager.deviceList
+            val fingerprintDevice = deviceList.values.find { device ->
+                device.vendorId == 1466 && device.productId == 10 // DigitalPersona U.are.U 4500
+            }
+            
+            if (fingerprintDevice == null) {
+                updateStatus("USB fingerprint reader not found - Please connect device", true)
+                enableControls(false)
+                binding.btnInitialize.text = "Initialize USB Device"
+                binding.btnInitialize.isEnabled = true
+                return
+            }
+            
+            Log.d("MainActivity", "Found USB device: ${fingerprintDevice.deviceName}")
+            requestUsbPermission(fingerprintDevice)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error in initializeReader: ${e.message}", e)
+            e.printStackTrace()
+            runOnUiThread {
+                updateStatus("Error: ${e.message}", true)
+                binding.btnInitialize.isEnabled = true
+                binding.btnInitialize.text = "Initialize USB Device"
+            }
+        }
+    }
+    
+    private fun initializeLibfprint() {
+        if (usbDevice == null) {
+            Log.e("MainActivity", "USB device is null")
+            updateStatus("USB device not found", true)
+            binding.btnInitialize.isEnabled = true
+            binding.btnInitialize.text = "Initialize USB Device"
+            return
+        }
+        
+        // Open USB device using Android USB Host API
+        val connection = usbManager.openDevice(usbDevice)
+        if (connection == null) {
+            Log.e("MainActivity", "Failed to open USB device")
+            updateStatus("Failed to open USB device", true)
+            binding.btnInitialize.isEnabled = true
+            binding.btnInitialize.text = "Initialize USB Device"
+            return
+        }
+        
+        // Get file descriptor from USB connection
+        val fd = connection.fileDescriptor
+        if (fd < 0) {
+            Log.e("MainActivity", "Invalid file descriptor: $fd")
+            connection.close()
+            updateStatus("Failed to get USB file descriptor", true)
+            binding.btnInitialize.isEnabled = true
+            binding.btnInitialize.text = "Initialize USB Device"
+            return
+        }
+        
+        Log.d("MainActivity", "USB device opened, file descriptor: $fd")
+        
+        // Initialize libfprint first (this creates the native instance)
+        val initialized = FingerprintJNI.initialize(this)
+        if (!initialized) {
+            Log.e("MainActivity", "Failed to initialize FingerprintJNI: ${FingerprintJNI.getLastError()}")
+            connection.close()
+            updateStatus("Failed to initialize libfprint", true)
+            binding.btnInitialize.isEnabled = true
+            binding.btnInitialize.text = "Initialize USB Device"
+            return
+        }
+        
+        Log.d("MainActivity", "FingerprintJNI initialized successfully")
+        
+        // Now pass file descriptor to native code
+        val fdSet = FingerprintJNI.setUsbFileDescriptor(fd)
+        if (!fdSet) {
+            Log.e("MainActivity", "Failed to set USB file descriptor: ${FingerprintJNI.getLastError()}")
+            connection.close()
+            FingerprintJNI.cleanup()
+            updateStatus("Failed to set USB file descriptor", true)
+            binding.btnInitialize.isEnabled = true
+            binding.btnInitialize.text = "Initialize USB Device"
+            return
+        }
+        
+        Log.d("MainActivity", "USB file descriptor set successfully")
+        
+        // Now initialize fingerprint manager (which will use the file descriptor)
+        val managerInitialized = fingerprintManager.initialize(this)
+        if (managerInitialized) {
+            isInitialized = true
+            updateStatus("USB device initialized successfully", false)
+            enableControls(true)
+            binding.btnInitialize.text = "Device Ready"
+        } else {
+            updateStatus("Failed to initialize libfprint: ${fingerprintManager.getLastError()}", true)
+            enableControls(false)
+            binding.btnInitialize.text = "Initialize USB Device"
+        }
+        
+        binding.btnInitialize.isEnabled = true
+        
+        // Keep connection open (don't close it)
+        // The file descriptor needs to remain valid for libusb
+    }
+    
+    private fun initializeLibfprintOld() {
+        updateStatus("Initializing libfprint...", false)
         
         val available = fingerprintManager.initialize(this)
         
@@ -85,7 +275,7 @@ class MainActivity : AppCompatActivity() {
             enableControls(true)
             binding.btnInitialize.text = "Device Ready"
         } else {
-            updateStatus("USB device not available - Please connect fingerprint reader", true)
+            updateStatus("Failed to initialize libfprint: ${fingerprintManager.getLastError()}", true)
             enableControls(false)
             binding.btnInitialize.text = "Initialize USB Device"
         }
@@ -128,23 +318,6 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-            }
-        }
-    }
-    
-    private fun loadUserInfo(userId: Int) {
-        lifecycleScope.launch {
-            try {
-                val response = ApiClient.apiService.getUser(userId)
-                if (response.isSuccessful && response.body() != null) {
-                    val user = response.body()!!
-                    selectedUser = user
-                    runOnUiThread {
-                        updateUserInfo(user)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("MainActivity", "Error loading user info: ${e.message}", e)
             }
         }
     }
@@ -268,10 +441,6 @@ class MainActivity : AppCompatActivity() {
                     binding.btnIdentify.isEnabled = true
 
                     if (matchedUserId != -1 && score >= 60) {
-                        // Load user info for display
-                        selectedUserId = matchedUserId
-                        loadUserInfo(matchedUserId)
-                        
                         showResult("IDENTIFIED", "User ID: $matchedUserId\nScore: $score%", true)
                         updateStatus("User identified! ID: $matchedUserId, Score: $score%", false)
                         Toast.makeText(this@MainActivity, "User identified: ID $matchedUserId (Score: $score%)", Toast.LENGTH_LONG).show()
@@ -292,22 +461,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun updateUserInfo(user: UserResponse?) {
-        if (user == null) {
-            binding.userInfoLabel.text = "No user selected"
-            binding.userEmailLabel.visibility = View.GONE
-            selectedUserId = null
-        } else {
-            binding.userInfoLabel.text = user.name
-            selectedUserId = user.id
-            if (!user.email.isNullOrEmpty()) {
-                binding.userEmailLabel.text = user.email
-                binding.userEmailLabel.visibility = View.VISIBLE
-            } else {
-                binding.userEmailLabel.visibility = View.GONE
-            }
-        }
-    }
+    // Removed updateUserInfo - not needed for PoC
     
     private fun enableControls(enabled: Boolean) {
         // Verification button is enabled if device is initialized (user can be selected via dialog)
@@ -347,6 +501,60 @@ class MainActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            unregisterReceiver(usbPermissionReceiver)
+        } catch (e: Exception) {
+            // Receiver might not be registered
+        }
         fingerprintManager.cleanup()
+    }
+    
+    private fun getLastError(): String {
+        return fingerprintManager.getLastError()
+    }
+    
+    private fun setupUserList() {
+        try {
+            userListAdapter = com.arkana.fingerprintpoc.adapter.UserListAdapter { user ->
+                selectedUserId = user.id
+                userListAdapter.setSelectedUserId(user.id)
+                Toast.makeText(this, "Selected user: ${user.name} (ID: ${user.id})", Toast.LENGTH_SHORT).show()
+                Log.d("MainActivity", "User selected: ${user.name} (ID: ${user.id})")
+            }
+            
+            binding.recyclerViewUsers.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+            binding.recyclerViewUsers.adapter = userListAdapter
+            // Enable smooth scrolling
+            binding.recyclerViewUsers.setHasFixedSize(false)
+            Log.d("MainActivity", "User list setup completed successfully")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error setting up user list: ${e.message}", e)
+            e.printStackTrace()
+        }
+    }
+    
+    private fun loadUserList() {
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.apiService.listUsers()
+                if (response.isSuccessful && response.body() != null) {
+                    val users = response.body()!!
+                    runOnUiThread {
+                        userListAdapter.submitList(users)
+                        Log.d("MainActivity", "Loaded ${users.size} users")
+                    }
+                } else {
+                    Log.e("MainActivity", "Failed to load users: ${response.message()}")
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Failed to load users: ${response.message()}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error loading users: ${e.message}", e)
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Error loading users: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 }

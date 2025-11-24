@@ -102,8 +102,8 @@ exe_wrapper = '${SCRIPT_DIR}/android_exe_wrapper.sh'
 [built-in options]
 c_args = ['-DANDROID', '-fPIC', '-ffunction-sections', '-funwind-tables', '-fstack-protector-strong', '-fno-addrsig', '--sysroot=${SYSROOT}', '-I${ANDROID_PREFIX}/include']
 cpp_args = ['-DANDROID', '-fPIC', '-ffunction-sections', '-funwind-tables', '-fstack-protector-strong', '-fno-addrsig', '--sysroot=${SYSROOT}', '-I${ANDROID_PREFIX}/include', '-std=c++17']
-c_link_args = ['--sysroot=${SYSROOT}', '-L${ANDROID_PREFIX}/lib', '-Wl,--gc-sections', '-Wl,--build-id', '-Wl,--no-undefined', '-Wl,-z,noexecstack', '-Wl,-z,relro', '-Wl,-z,now', '-landroid']
-cpp_link_args = ['--sysroot=${SYSROOT}', '-L${ANDROID_PREFIX}/lib', '-Wl,--gc-sections', '-Wl,--build-id', '-Wl,--no-undefined', '-Wl,-z,noexecstack', '-Wl,-z,relro', '-Wl,-z,now', '-landroid']
+c_link_args = ['--sysroot=${SYSROOT}', '-L${ANDROID_PREFIX}/lib', '-Wl,--gc-sections', '-Wl,--build-id', '-Wl,--no-undefined', '-Wl,-z,noexecstack', '-Wl,-z,relro', '-Wl,-z,now', '-landroid', '-llog']
+cpp_link_args = ['--sysroot=${SYSROOT}', '-L${ANDROID_PREFIX}/lib', '-Wl,--gc-sections', '-Wl,--build-id', '-Wl,--no-undefined', '-Wl,-z,noexecstack', '-Wl,-z,relro', '-Wl,-z,now', '-landroid', '-llog']
 
 [host_machine]
 system = 'android'

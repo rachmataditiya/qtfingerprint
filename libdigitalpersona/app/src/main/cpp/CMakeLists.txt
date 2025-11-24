@@ -22,6 +22,9 @@ include_directories(
     ${ANDROID_NDK_PREFIX}/include/libfprint-2
     ${ANDROID_NDK_PREFIX}/include/glib-2.0
     ${ANDROID_NDK_PREFIX}/lib/glib-2.0/include
+    ${ANDROID_NDK_PREFIX}/include/gusb-1
+    ${ANDROID_NDK_PREFIX}/include/json-glib-1.0
+    ${ANDROID_NDK_PREFIX}/include/libusb-1.0
 )
 
 # Debug: Print include paths

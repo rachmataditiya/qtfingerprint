@@ -160,10 +160,12 @@ pub async fn get_fingerprint(
         .await
     {
         Ok(Some(user)) => {
-            // Return fingerprint_image if available, otherwise fingerprint_template
-            let template = user.fingerprint_image
-                .or(user.fingerprint_template)
+            // For verify/identify, we need FP3 template, not raw image
+            // fingerprint_template contains FP3 format, fingerprint_image is raw image (111360 bytes)
+            let template = user.fingerprint_template
+                .or(user.fingerprint_image) // Fallback to image if template not available (shouldn't happen)
                 .ok_or(StatusCode::NOT_FOUND)?;
+            info!("Returning fingerprint for user {}: template size = {} bytes", id, template.len());
             Ok(Json(FingerprintResponse { template }))
         }
         Ok(None) => Err(StatusCode::NOT_FOUND),

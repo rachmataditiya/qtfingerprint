@@ -5,9 +5,11 @@
 #include <chrono>
 #include <map>
 
-#define LOG_TAG "FingerprintManagerAndroid"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#include <android/log.h>
+#define ANDROID_LOG_TAG "FingerprintManagerAndroid"
+#define ANDROID_LOG(...) __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG, __VA_ARGS__)
+#define ANDROID_LOGW(...) __android_log_print(ANDROID_LOG_WARN, ANDROID_LOG_TAG, __VA_ARGS__)
+#define ANDROID_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG, __VA_ARGS__)
 
 FingerprintManagerAndroid::FingerprintManagerAndroid()
     : m_jniEnv(nullptr)
@@ -39,7 +41,7 @@ bool FingerprintManagerAndroid::initialize(JNIEnv* jniEnv, jobject context)
     m_jniEnv = jniEnv;
     m_context = jniEnv->NewGlobalRef(context);
     
-    // Find FingerprintJNI class
+    // Find FingerprintJNI class (for future callbacks if needed)
     jclass jniClass = jniEnv->FindClass("com/arkana/libdigitalpersona/FingerprintJNI");
     if (!jniClass) {
         setError("Failed to find FingerprintJNI class");
@@ -48,23 +50,15 @@ bool FingerprintManagerAndroid::initialize(JNIEnv* jniEnv, jobject context)
     
     m_jniClass = (jclass)jniEnv->NewGlobalRef(jniClass);
     
-    // Call initialize method
-    jmethodID initMethod = jniEnv->GetStaticMethodID(jniClass, "initialize", "(Landroid/content/Context;)V");
-    if (!initMethod) {
-        setError("Failed to find initialize method");
-        return false;
+    // Initialize FingerprintCapture
+    if (!m_capture) {
+        m_capture = new FingerprintCapture();
     }
     
-    jniEnv->CallStaticVoidMethod(jniClass, initMethod, context);
+    // Note: We don't call Java initialize() here because it's already called
+    // from Kotlin before createNativeInstance(). We just initialize the native capture.
     
-    if (jniEnv->ExceptionCheck()) {
-        jniEnv->ExceptionDescribe();
-        jniEnv->ExceptionClear();
-        setError("Exception during JNI initialization");
-        return false;
-    }
-    
-    LOGI("FingerprintManagerAndroid initialized");
+    ANDROID_LOG("FingerprintManagerAndroid initialized");
     return true;
 }
 
@@ -109,7 +103,7 @@ int FingerprintManagerAndroid::getDeviceCount()
     
     // Initialize if not already done
     if (!m_capture->initialize()) {
-        LOGE("Failed to initialize FingerprintCapture: %s", m_capture->getLastError().c_str());
+        ANDROID_LOGE("Failed to initialize FingerprintCapture: %s", m_capture->getLastError().c_str());
         return 0;
     }
     
@@ -155,7 +149,7 @@ bool FingerprintManagerAndroid::openReader(jobject activity)
     }
     
     m_isOpen = true;
-    LOGI("Fingerprint reader opened successfully");
+    ANDROID_LOG("Fingerprint reader opened successfully");
     
     return true;
 }
@@ -207,28 +201,49 @@ bool FingerprintManagerAndroid::verifyFingerprint(const std::vector<uint8_t>& st
     matched = false;
     score = 0;
     
-    if (!m_capture || !m_isOpen) {
+    ANDROID_LOG("verifyFingerprint called - template size: %zu bytes", storedTemplate.size());
+    
+    if (!m_capture) {
+        ANDROID_LOGE("FingerprintCapture is null");
+        setError("Reader not initialized");
+        return false;
+    }
+    
+    if (!m_isOpen) {
+        ANDROID_LOGE("Reader not marked as open");
         setError("Reader not open");
         return false;
     }
     
-    // Ensure device is open
-    if (!m_capture->openDevice(0)) {
-        setError("Failed to open device: " + m_capture->getLastError());
-        return false;
+    // Check if device is already open
+    if (!m_capture->isDeviceOpen()) {
+        ANDROID_LOG("Device not open, opening device...");
+        // Ensure device is open
+        if (!m_capture->openDevice(0)) {
+            ANDROID_LOGE("Failed to open device: %s", m_capture->getLastError().c_str());
+            setError("Failed to open device: " + m_capture->getLastError());
+            return false;
+        }
+        ANDROID_LOG("Device opened successfully");
+    } else {
+        ANDROID_LOG("Device already open, proceeding with verification");
     }
     
+    ANDROID_LOG("Calling matchWithTemplate...");
     // Match using libfprint (like Qt does)
     bool result = m_capture->matchWithTemplate(storedTemplate, matched, score);
+    ANDROID_LOG("matchWithTemplate returned: result=%d, matched=%d, score=%d", result, matched, score);
     
-    // Close device after matching
-    m_capture->closeDevice();
+    // Don't close device - keep it open for subsequent operations
+    // m_capture->closeDevice();
     
     if (!result) {
+        ANDROID_LOGE("Matching failed: %s", m_capture->getLastError().c_str());
         setError("Matching failed: " + m_capture->getLastError());
         return false;
     }
     
+    ANDROID_LOG("Verification completed successfully: matched=%d, score=%d", matched, score);
     return true;
 }
 
@@ -236,34 +251,56 @@ int FingerprintManagerAndroid::identifyUser(const std::map<int, std::vector<uint
 {
     score = 0;
     
-    if (!m_capture || !m_isOpen) {
+    ANDROID_LOG("identifyUser called - templates count: %zu", templates.size());
+    
+    if (!m_capture) {
+        ANDROID_LOGE("FingerprintCapture is null");
+        setError("Reader not initialized");
+        return -1;
+    }
+    
+    if (!m_isOpen) {
+        ANDROID_LOGE("Reader not marked as open");
         setError("Reader not open");
         return -1;
     }
     
     if (templates.empty()) {
+        ANDROID_LOGE("No templates provided");
         setError("No templates provided");
         return -1;
     }
     
-    // Ensure device is open
-    if (!m_capture->openDevice(0)) {
-        setError("Failed to open device: " + m_capture->getLastError());
-        return -1;
+    // Check if device is already open
+    if (!m_capture->isDeviceOpen()) {
+        ANDROID_LOG("Device not open, opening device...");
+        // Ensure device is open
+        if (!m_capture->openDevice(0)) {
+            ANDROID_LOGE("Failed to open device: %s", m_capture->getLastError().c_str());
+            setError("Failed to open device: " + m_capture->getLastError());
+            return -1;
+        }
+        ANDROID_LOG("Device opened successfully");
+    } else {
+        ANDROID_LOG("Device already open, proceeding with identification");
     }
     
+    ANDROID_LOG("Calling identifyUser...");
     // Identify using libfprint (like Qt does)
     int matchedUserId = -1;
     bool result = m_capture->identifyUser(templates, matchedUserId, score);
+    ANDROID_LOG("identifyUser returned: result=%d, matchedUserId=%d, score=%d", result, matchedUserId, score);
     
-    // Close device after identification
-    m_capture->closeDevice();
+    // Don't close device - keep it open for subsequent operations
+    // m_capture->closeDevice();
     
     if (!result) {
+        ANDROID_LOGE("Identification failed: %s", m_capture->getLastError().c_str());
         setError("Identification failed: " + m_capture->getLastError());
         return -1;
     }
     
+    ANDROID_LOG("Identification completed successfully: userId=%d, score=%d", matchedUserId, score);
     return matchedUserId;
 }
 
@@ -293,20 +330,20 @@ void FingerprintManagerAndroid::onEnrollmentProgress(int current, int total, con
     if (m_progressCallback) {
         m_progressCallback(current, total, message);
     }
-    LOGI("Enrollment progress: %d/%d - %s", current, total, message.c_str());
+    ANDROID_LOG("Enrollment progress: %d/%d - %s", current, total, message.c_str());
 }
 
 void FingerprintManagerAndroid::onEnrollmentComplete(const std::vector<uint8_t>& templateData)
 {
     m_enrollmentInProgress = false;
-    LOGI("Enrollment complete, template size: %zu", templateData.size());
+    ANDROID_LOG("Enrollment complete, template size: %zu", templateData.size());
 }
 
 void FingerprintManagerAndroid::onEnrollmentError(const std::string& error)
 {
     m_enrollmentInProgress = false;
     setError("Enrollment error: " + error);
-    LOGE("Enrollment error: %s", error.c_str());
+    ANDROID_LOGE("Enrollment error: %s", error.c_str());
 }
 
 void FingerprintManagerAndroid::onVerificationSuccess(int score)
@@ -314,7 +351,7 @@ void FingerprintManagerAndroid::onVerificationSuccess(int score)
     m_verificationComplete = true;
     m_verificationResult = true;
     m_verificationScore = score;
-    LOGI("Verification success, score: %d", score);
+    ANDROID_LOG("Verification success, score: %d", score);
 }
 
 void FingerprintManagerAndroid::onVerificationFailure(const std::string& error)
@@ -323,7 +360,7 @@ void FingerprintManagerAndroid::onVerificationFailure(const std::string& error)
     m_verificationResult = false;
     m_verificationScore = 0;
     setError("Verification failed: " + error);
-    LOGE("Verification failure: %s", error.c_str());
+    ANDROID_LOGE("Verification failure: %s", error.c_str());
 }
 
 void FingerprintManagerAndroid::onIdentificationMatch(int userId, int score)
@@ -331,7 +368,7 @@ void FingerprintManagerAndroid::onIdentificationMatch(int userId, int score)
     m_identificationComplete = true;
     m_identificationUserId = userId;
     m_identificationScore = score;
-    LOGI("Identification match: userId=%d, score=%d", userId, score);
+    ANDROID_LOG("Identification match: userId=%d, score=%d", userId, score);
 }
 
 void FingerprintManagerAndroid::onIdentificationNoMatch(const std::string& error)
@@ -339,7 +376,7 @@ void FingerprintManagerAndroid::onIdentificationNoMatch(const std::string& error
     m_identificationComplete = true;
     m_identificationUserId = -1;
     m_identificationScore = 0;
-    LOGI("Identification no match: %s", error.c_str());
+    ANDROID_LOG("Identification no match: %s", error.c_str());
 }
 
 void FingerprintManagerAndroid::waitForCompletion()
@@ -357,7 +394,7 @@ void FingerprintManagerAndroid::waitForCompletion()
 void FingerprintManagerAndroid::setError(const std::string& error)
 {
     m_lastError = error;
-    LOGE("Error: %s", error.c_str());
+    ANDROID_LOGE("Error: %s", error.c_str());
 }
 
 // ========== JNI Export Functions ==========

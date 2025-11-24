@@ -17,6 +17,18 @@
 
 #include <libusb.h>
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#define ANDROID_LOG_TAG "libgusb"
+#define ANDROID_LOG(...) __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG, __VA_ARGS__)
+#define ANDROID_LOGW(...) __android_log_print(ANDROID_LOG_WARN, ANDROID_LOG_TAG, __VA_ARGS__)
+#define ANDROID_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG, __VA_ARGS__)
+#else
+#define ANDROID_LOG(...)
+#define ANDROID_LOGW(...)
+#define ANDROID_LOGE(...)
+#endif
+
 #include "gusb-context-private.h"
 #include "gusb-device-private.h"
 #include "gusb-util.h"
@@ -52,6 +64,9 @@ typedef struct {
 	GPtrArray *idle_events;
 	GMutex idle_events_mutex;
 	guint idle_events_id;
+#ifdef __ANDROID__
+	GHashTable *wrapped_handles; /* Map libusb_device* -> libusb_device_handle* for wrapped devices */
+#endif
 } GUsbContextPrivate;
 
 /* not defined in FreeBSD */
@@ -141,6 +156,9 @@ g_usb_context_dispose(GObject *object)
 	g_clear_pointer(&priv->ctx, libusb_exit);
 	g_clear_pointer(&priv->idle_events, g_ptr_array_unref);
 	g_mutex_clear(&priv->idle_events_mutex);
+#ifdef __ANDROID__
+	g_clear_pointer(&priv->wrapped_handles, g_hash_table_unref);
+#endif
 
 	G_OBJECT_CLASS(g_usb_context_parent_class)->dispose(object);
 }
@@ -269,13 +287,13 @@ static void
 g_usb_context_emit_device_add(GUsbContext *self, GUsbDevice *device)
 {
 	GUsbContextPrivate *priv = GET_PRIVATE(self);
+	const gchar *platform_id = g_usb_device_get_platform_id(device);
+	guint16 vid = g_usb_device_get_vid(device);
+	guint16 pid = g_usb_device_get_pid(device);
 
-	/* emitted directly by g_usb_context_enumerate */
-	if (!priv->done_enumerate)
-		return;
-
-	if (_g_usb_context_has_flag(self, G_USB_CONTEXT_FLAGS_DEBUG))
-		g_debug("emitting ::device-added(%s)", g_usb_device_get_platform_id(device));
+	/* Always emit signal - signal handlers should be connected by now */
+	/* If enumeration is not done yet, we still emit so libfprint can catch it */
+	ANDROID_LOG("gusb_context_emit_device_add: emitting ::device-added(%s) VID:PID=%04x:%04x (done_enumerate=%d)", platform_id, vid, pid, priv->done_enumerate);
 	g_signal_emit(self, signals[DEVICE_ADDED_SIGNAL], 0, device);
 }
 
@@ -330,7 +348,7 @@ g_usb_context_add_device(GUsbContext *self, struct libusb_device *dev)
 	/* add the device */
 	device = _g_usb_device_new(self, dev, &error);
 	if (device == NULL) {
-		g_debug("There was a problem creating the device: %s", error->message);
+		ANDROID_LOGE("gusb_context_add_device: There was a problem creating the device: %s", error ? error->message : "unknown error");
 		return;
 	}
 
@@ -357,7 +375,9 @@ g_usb_context_add_device(GUsbContext *self, struct libusb_device *dev)
 	}
 
 	/* emit signal */
+	ANDROID_LOG("g_usb_context_add_device: About to emit device-added signal for %s", platform_id);
 	g_usb_context_emit_device_add(self, device);
+	ANDROID_LOG("g_usb_context_add_device: Device-added signal emitted for %s", platform_id);
 }
 
 static void
@@ -697,9 +717,18 @@ g_usb_context_rescan(GUsbContext *self)
 	}
 
 	/* look for any removed devices */
+	ANDROID_LOG("g_usb_context_rescan: Calling libusb_get_device_list...");
 	libusb_get_device_list(priv->ctx, &dev_list);
+	ssize_t dev_count = 0;
+	if (dev_list) {
+		for (ssize_t i = 0; dev_list[i] != NULL; i++) {
+			dev_count++;
+		}
+	}
+	ANDROID_LOG("g_usb_context_rescan: libusb_get_device_list returned %zd devices", dev_count);
 	for (GList *l = existing_devices; l != NULL; l = l->next) {
 		GUsbDevice *device = G_USB_DEVICE(l->data);
+		const gchar *platform_id = g_usb_device_get_platform_id(device);
 		gboolean found = FALSE;
 		for (guint i = 0; dev_list != NULL && dev_list[i] != NULL; i++) {
 			if (libusb_get_bus_number(dev_list[i]) == g_usb_device_get_bus(device) &&
@@ -710,14 +739,32 @@ g_usb_context_rescan(GUsbContext *self)
 			}
 		}
 		if (!found) {
-			g_usb_context_emit_device_remove(self, device);
-			g_ptr_array_remove(priv->devices, device);
+			/* On Android, wrapped devices might not appear in libusb_get_device_list */
+			/* Check if this is a wrapped device by checking platform_id format */
+			if (g_str_has_prefix(platform_id, "usb:")) {
+				ANDROID_LOG("g_usb_context_rescan: Keeping wrapped Android device %s (not in libusb list)", platform_id);
+				/* Don't remove wrapped devices - they're valid even if not in libusb list */
+			} else {
+				ANDROID_LOG("g_usb_context_rescan: Removing device %s (not found in libusb list)", platform_id);
+				g_usb_context_emit_device_remove(self, device);
+				g_ptr_array_remove(priv->devices, device);
+			}
 		}
 	}
 
 	/* add any devices not yet added (duplicates will be filtered */
-	for (guint i = 0; dev_list != NULL && dev_list[i] != NULL; i++)
+	ANDROID_LOG("g_usb_context_rescan: Adding devices from libusb list...");
+	for (guint i = 0; dev_list != NULL && dev_list[i] != NULL; i++) {
+		guint8 bus = libusb_get_bus_number(dev_list[i]);
+		guint8 address = libusb_get_device_address(dev_list[i]);
+		struct libusb_device_descriptor desc;
+		gint desc_result = libusb_get_device_descriptor(dev_list[i], &desc);
+		if (desc_result == LIBUSB_SUCCESS) {
+			ANDROID_LOG("g_usb_context_rescan: Found device %u: VID:PID=%04x:%04x, bus=%d, address=%d", i, desc.idVendor, desc.idProduct, bus, address);
+		}
 		g_usb_context_add_device(self, dev_list[i]);
+	}
+	ANDROID_LOG("g_usb_context_rescan: After adding devices, GUsb has %u devices", priv->devices->len);
 
 	libusb_free_device_list(dev_list, 1);
 }
@@ -849,23 +896,35 @@ g_usb_context_enumerate(GUsbContext *self)
 	GUsbContextPrivate *priv = GET_PRIVATE(self);
 
 	/* only ever initially scan once, then rely on hotplug / poll */
-	if (priv->done_enumerate)
+	if (priv->done_enumerate) {
+		ANDROID_LOG("g_usb_context_enumerate: Already enumerated, skipping (devices=%u)", priv->devices->len);
 		return;
+	}
 
+	ANDROID_LOG("g_usb_context_enumerate: Starting rescan...");
 	g_usb_context_rescan(self);
+	ANDROID_LOG("g_usb_context_enumerate: Rescan completed, found %u devices", priv->devices->len);
+	
 	if (!libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
-		g_debug("platform does not do hotplug, using polling");
+		ANDROID_LOG("g_usb_context_enumerate: platform does not do hotplug, using polling");
 		g_usb_context_ensure_rescan_timeout(self);
 	}
 	priv->done_enumerate = TRUE;
 
 	/* emit device-added signals before returning */
+	ANDROID_LOG("g_usb_context_enumerate: Emitting device-added signals for %u devices...", priv->devices->len);
 	for (guint i = 0; i < priv->devices->len; i++) {
+		GUsbDevice *device = g_ptr_array_index(priv->devices, i);
+		guint16 vid = g_usb_device_get_vid(device);
+		guint16 pid = g_usb_device_get_pid(device);
+		const gchar *platform_id = g_usb_device_get_platform_id(device);
+		ANDROID_LOG("g_usb_context_enumerate: Emitting device-added signal for device %u: %s VID:PID=%04x:%04x", i, platform_id, vid, pid);
 		g_signal_emit(self,
 			      signals[DEVICE_ADDED_SIGNAL],
 			      0,
-			      g_ptr_array_index(priv->devices, i));
+			      device);
 	}
+	ANDROID_LOG("g_usb_context_enumerate: All device-added signals emitted");
 
 	/* any queued up hotplug events are queued as idle handlers */
 }
@@ -953,7 +1012,35 @@ g_usb_context_initable_init(GInitable *initable, GCancellable *cancellable, GErr
 	gint rc;
 	libusb_context *ctx;
 
-	rc = libusb_init(&ctx);
+	/* On Android, check for LIBUSB_FD environment variable */
+	/* If set, we need to wrap the file descriptor after libusb_init */
+	const gchar *libusb_fd_str = g_getenv("LIBUSB_FD");
+	gint android_fd = -1;
+	ANDROID_LOG("gusb_context_initable_init: Checking LIBUSB_FD environment variable...");
+	if (libusb_fd_str) {
+		android_fd = g_ascii_strtoll(libusb_fd_str, NULL, 10);
+		ANDROID_LOG("gusb_context_initable_init: LIBUSB_FD=%s, parsed as %d", libusb_fd_str, android_fd);
+		if (android_fd > 0) {
+			ANDROID_LOG("gusb_context_initable_init: LIBUSB_FD=%d found, will wrap after init", android_fd);
+			g_debug("gusb_context_initable_init: LIBUSB_FD=%d found, will wrap after init", android_fd);
+		} else {
+			ANDROID_LOGW("gusb_context_initable_init: LIBUSB_FD=%s is invalid (parsed as %d)", libusb_fd_str, android_fd);
+		}
+	} else {
+		ANDROID_LOG("gusb_context_initable_init: LIBUSB_FD environment variable not set");
+	}
+
+	/* On Android, use LIBUSB_OPTION_NO_DEVICE_DISCOVERY to skip enumeration during init */
+	/* This prevents libusb_init from failing when it can't access USB devices */
+	struct libusb_init_option options[1];
+	options[0].option = LIBUSB_OPTION_NO_DEVICE_DISCOVERY;
+	options[0].value.ival = 1;
+	
+	rc = libusb_init_context(&ctx, options, 1);
+	if (rc < 0) {
+		/* Fallback to regular libusb_init if init_context fails */
+		rc = libusb_init(&ctx);
+	}
 	if (rc < 0) {
 		g_set_error(error,
 			    G_USB_CONTEXT_ERROR,
@@ -962,6 +1049,60 @@ g_usb_context_initable_init(GInitable *initable, GCancellable *cancellable, GErr
 			    g_usb_strerror(rc),
 			    rc);
 		return FALSE;
+	}
+
+	/* On Android, wrap the file descriptor if LIBUSB_FD is set */
+	/* This must be done AFTER libusb_init but BEFORE enumeration */
+	if (android_fd > 0) {
+		libusb_device_handle *dev_handle = NULL;
+		libusb_device *wrapped_dev = NULL;
+		ANDROID_LOG("gusb_context_initable_init: Attempting to wrap Android file descriptor %d", android_fd);
+		gint wrap_result = libusb_wrap_sys_device(ctx, (intptr_t)android_fd, &dev_handle);
+		ANDROID_LOG("gusb_context_initable_init: libusb_wrap_sys_device returned: %d, handle: %p", wrap_result, dev_handle);
+		if (wrap_result == LIBUSB_SUCCESS && dev_handle) {
+			wrapped_dev = libusb_get_device(dev_handle);
+			if (wrapped_dev) {
+				guint8 bus = libusb_get_bus_number(wrapped_dev);
+				guint8 address = libusb_get_device_address(wrapped_dev);
+				struct libusb_device_descriptor desc;
+				gint desc_result = libusb_get_device_descriptor(wrapped_dev, &desc);
+				
+				ANDROID_LOG("gusb_context_initable_init: ✓✓✓ SUCCESS! Wrapped Android file descriptor %d, device: %p", android_fd, wrapped_dev);
+				if (desc_result == LIBUSB_SUCCESS) {
+					ANDROID_LOG("gusb_context_initable_init: Device VID:PID = %04x:%04x, bus=%d, address=%d", desc.idVendor, desc.idProduct, bus, address);
+				}
+				
+				/* Store the wrapped handle in context private data for later use */
+				/* This handle will be used when g_usb_device_open() is called */
+				ANDROID_LOG("gusb_context_initable_init: Storing wrapped handle %p for device %p", dev_handle, wrapped_dev);
+				if (!priv->wrapped_handles) {
+					priv->wrapped_handles = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+				}
+				g_hash_table_insert(priv->wrapped_handles, wrapped_dev, dev_handle);
+				ANDROID_LOG("gusb_context_initable_init: Wrapped handle stored in hash table");
+				
+				/* Manually add the wrapped device to GUsb device list immediately */
+				/* This ensures the device is available even before enumeration */
+				ANDROID_LOG("gusb_context_initable_init: Manually adding wrapped device to GUsb...");
+				g_usb_context_add_device(self, wrapped_dev);
+				ANDROID_LOG("gusb_context_initable_init: Wrapped device manually added to GUsb");
+				
+				/* Device is now available - libusb_wrap_sys_device already added it to the device list */
+				/* Trigger enumeration to make device visible to GUsb */
+				ANDROID_LOG("gusb_context_initable_init: Triggering enumeration to discover wrapped device...");
+				g_usb_context_enumerate(self);
+				ANDROID_LOG("gusb_context_initable_init: Enumeration completed");
+			} else {
+				ANDROID_LOGE("gusb_context_initable_init: Wrapped device handle but got NULL device");
+			}
+			/* Don't close dev_handle - libusb needs it for enumeration */
+		} else {
+			const gchar *error_name = libusb_error_name(wrap_result);
+			ANDROID_LOGE("gusb_context_initable_init: ✗✗✗ FAILED to wrap Android file descriptor %d: %s [%i]",
+			          android_fd, error_name ? error_name : "unknown error", wrap_result);
+		}
+	} else {
+		ANDROID_LOG("gusb_context_initable_init: LIBUSB_FD not set or invalid (%d), skipping wrap", android_fd);
 	}
 
 	priv->main_ctx = g_main_context_ref(g_main_context_default());
@@ -1007,6 +1148,25 @@ g_usb_context_initable_iface_init(GInitableIface *iface)
  **/
 libusb_context *
 _g_usb_context_get_context(GUsbContext *self)
+{
+	GUsbContextPrivate *priv = GET_PRIVATE(self);
+	return priv->ctx;
+}
+
+/**
+ * g_usb_context_get_libusb_context:
+ * @self: a #GUsbContext
+ *
+ * Gets the internal libusb_context. This function is provided for
+ * Android integration where libusb needs direct access to the context
+ * for wrapping system file descriptors.
+ *
+ * Return value: (transfer none): the libusb_context
+ *
+ * Since: 0.5.0
+ **/
+libusb_context *
+g_usb_context_get_libusb_context(GUsbContext *self)
 {
 	GUsbContextPrivate *priv = GET_PRIVATE(self);
 	return priv->ctx;

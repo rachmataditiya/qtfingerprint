@@ -80,16 +80,16 @@ pub struct FingerprintResponse {
     pub template: Vec<u8>,
 }
 
-// Helper module for hex serialization (fallback for base64)
+// Helper module for base64 serialization
 mod base64_serde {
     use serde::{Deserializer, Serializer, Deserialize};
+    use base64::{Engine as _, engine::general_purpose};
     
-    // Use hex encoding as fallback (can be changed to base64 later)
     pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let encoded = hex::encode(bytes);
+        let encoded = general_purpose::STANDARD.encode(bytes);
         serializer.serialize_str(&encoded)
     }
 
@@ -98,8 +98,8 @@ mod base64_serde {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        hex::decode(s)
-            .map_err(|e| serde::de::Error::custom(format!("Invalid hex string: {}", e)))
+        general_purpose::STANDARD.decode(&s)
+            .map_err(|e| serde::de::Error::custom(format!("Invalid base64 string: {}", e)))
     }
 }
 

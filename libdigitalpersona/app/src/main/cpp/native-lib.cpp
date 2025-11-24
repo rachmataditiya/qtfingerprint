@@ -62,6 +62,22 @@ Java_com_arkana_libdigitalpersona_FingerprintJNI_nativeGetDeviceCount(JNIEnv* en
 }
 
 JNIEXPORT jboolean JNICALL
+Java_com_arkana_libdigitalpersona_FingerprintJNI_nativeSetUsbFileDescriptor(JNIEnv* env, jclass clazz, jlong nativePtr, jint fd) {
+    if (!nativePtr) {
+        LOGE("Native instance is null");
+        return JNI_FALSE;
+    }
+    FingerprintManagerAndroid* manager = reinterpret_cast<FingerprintManagerAndroid*>(nativePtr);
+    FingerprintCapture* capture = manager->getFingerprintCaptureInstance();
+    if (!capture) {
+        LOGE("FingerprintCapture instance is null");
+        return JNI_FALSE;
+    }
+    LOGI("Setting USB file descriptor %d", fd);
+    return capture->setUsbFileDescriptor(fd) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
 Java_com_arkana_libdigitalpersona_FingerprintJNI_nativeOpenReader(JNIEnv* env, jclass clazz, jlong nativePtr, jobject activity) {
     if (!nativePtr || !activity) return JNI_FALSE;
     FingerprintManagerAndroid* manager = reinterpret_cast<FingerprintManagerAndroid*>(nativePtr);

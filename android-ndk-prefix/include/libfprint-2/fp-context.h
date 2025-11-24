@@ -49,4 +49,19 @@ void fp_context_enumerate (FpContext *context);
 
 GPtrArray *fp_context_get_devices (FpContext *context);
 
+/**
+ * fp_context_set_android_usb_fd:
+ * @context: a #FpContext
+ * @fd: Android USB file descriptor from UsbDeviceConnection.getFileDescriptor()
+ *
+ * Set Android USB file descriptor for libusb integration.
+ * This function integrates the Android USB file descriptor with libusb
+ * context used by libfprint, allowing device enumeration on Android.
+ *
+ * Returns: %TRUE on success, %FALSE on error
+ *
+ * Since: 1.94
+ */
+gboolean fp_context_set_android_usb_fd (FpContext *context, gint fd);
+
 G_END_DECLS

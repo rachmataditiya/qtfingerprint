@@ -10,7 +10,8 @@ object FingerprintJNI {
     
     private var fingerprintService: FingerprintService? = null
     private var currentContext: Context? = null
-    private var nativeInstance: Long = 0
+    @JvmStatic
+    var nativeInstance: Long = 0 // Made public for access from FingerprintManager
     
     // Native methods for C++ instance management
     @JvmStatic
@@ -26,6 +27,9 @@ object FingerprintJNI {
     
     @JvmStatic
     private external fun nativeGetDeviceCount(nativePtr: Long): Int
+    
+    @JvmStatic
+    private external fun nativeSetUsbFileDescriptor(nativePtr: Long, fd: Int): Boolean
     
     @JvmStatic
     private external fun nativeOpenReader(nativePtr: Long, activity: Any): Boolean
@@ -113,6 +117,12 @@ object FingerprintJNI {
         } else {
             fingerprintService?.getDeviceCount() ?: 0
         }
+    }
+    
+    @JvmStatic
+    fun setUsbFileDescriptor(fd: Int): Boolean {
+        if (nativeInstance == 0L) return false
+        return nativeSetUsbFileDescriptor(nativeInstance, fd)
     }
     
     @JvmStatic

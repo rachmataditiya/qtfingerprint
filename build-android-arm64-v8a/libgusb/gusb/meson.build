@@ -51,6 +51,18 @@ vflag_test = '-Wl,--version-script,@0@/@1@'.format(meson.current_source_dir(), m
 if cc.has_link_argument(vflag_test)
   vflag += '-Wl,--version-script,@0@/@1@'.format(meson.current_source_dir(), mapfile)
 endif
+# Android logging library
+log_dep = cc.find_library('log', required: false)
+
+gusb_deps_list = [
+    libgio,
+    libusb,
+    libjsonglib,
+]
+if log_dep.found()
+  gusb_deps_list += [log_dep]
+endif
+
 gusb = library(
   'gusb',
   sources : [
@@ -69,11 +81,7 @@ gusb = library(
   soversion : lt_current,
   version : lt_version,
   darwin_versions: [lt_current + 1, '@0@.@1@.0'.format(lt_current + 1, lt_revision)],
-  dependencies : [
-    libgio,
-    libusb,
-    libjsonglib,
-  ],
+  dependencies : gusb_deps_list,
   c_args : [
       cargs,
     ],

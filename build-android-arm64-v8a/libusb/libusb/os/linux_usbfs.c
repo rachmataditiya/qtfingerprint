@@ -368,6 +368,35 @@ static int op_init(struct libusb_context *ctx)
 		return LIBUSB_ERROR_NOT_SUPPORTED;
 	}
 
+#ifdef __ANDROID__
+	/* On Android, check for LIBUSB_FD environment variable */
+	/* If set, wrap the file descriptor immediately to make device available */
+	const char *libusb_fd_str = getenv("LIBUSB_FD");
+	if (libusb_fd_str) {
+		int android_fd = atoi(libusb_fd_str);
+		if (android_fd > 0) {
+			libusb_device_handle *dev_handle = NULL;
+			libusb_device *wrapped_dev = NULL;
+			usbi_dbg(ctx, "Android: wrapping file descriptor %d from LIBUSB_FD", android_fd);
+			r = libusb_wrap_sys_device(ctx, (intptr_t)android_fd, &dev_handle);
+			if (r == LIBUSB_SUCCESS && dev_handle) {
+				wrapped_dev = libusb_get_device(dev_handle);
+				if (wrapped_dev) {
+					/* Add wrapped device to the device list for enumeration */
+					usbi_mutex_lock(&ctx->usb_devs_lock);
+					usbi_dbg(ctx, "Android: successfully wrapped file descriptor %d, device: %p", android_fd, wrapped_dev);
+					/* Device is already added by libusb_wrap_sys_device, just ensure it's accessible */
+					usbi_mutex_unlock(&ctx->usb_devs_lock);
+				}
+				/* Don't close dev_handle - libusb needs it for enumeration */
+			} else {
+				usbi_warn(ctx, "Android: failed to wrap file descriptor %d: %s", 
+				          android_fd, libusb_error_name(r));
+			}
+		}
+	}
+#endif
+
 	usbfs_path = find_usbfs_path();
 	if (!usbfs_path) {
 		usbi_err(ctx, "could not find usbfs");
