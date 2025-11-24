@@ -38,7 +38,6 @@ private slots:
     void onCaptureEnrollFinished(); // New slot
     void onVerifyClicked();
     void onIdentifyClicked(); // New slot for identification
-    void onCaptureVerifySample();
     void onRefreshUserList();
     void onUserSelected(QListWidgetItem* item);
     void onDeleteUserClicked();
