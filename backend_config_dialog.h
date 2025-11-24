@@ -6,6 +6,8 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QSettings>
+#include <QGroupBox>
+#include <QFrame>
 
 class BackendConfigDialog : public QDialog {
     Q_OBJECT
