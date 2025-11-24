@@ -90,15 +90,22 @@ void BackendClient::getUserFingers(int userId)
 {
     if (m_baseUrl.isEmpty()) {
         emit error("Backend URL not configured");
+        qDebug() << "BackendClient: ERROR - Base URL is empty!";
         return;
     }
 
     QUrl url(m_baseUrl + QString("/users/%1/fingers").arg(userId));
     QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QNetworkReply* reply = m_networkManager->get(request);
     m_requestTypes[reply] = "getUserFingers";
-    qDebug() << "BackendClient: Getting fingers for user" << userId;
+    qDebug() << "BackendClient: Getting fingers for user" << userId << "from URL:" << url.toString();
+    
+    // Connect error signal for debugging
+    connect(reply, &QNetworkReply::errorOccurred, this, [this, userId, url](QNetworkReply::NetworkError error) {
+        qDebug() << "BackendClient: Network error getting fingers for user" << userId << ":" << error << "URL:" << url.toString();
+    });
 }
 
 void BackendClient::storeTemplate(int userId, const QByteArray& templateData, const QString& finger)
@@ -302,13 +309,17 @@ void BackendClient::handleUserRetrieved(QNetworkReply* reply)
 
 void BackendClient::handleUserFingersRetrieved(QNetworkReply* reply)
 {
+    QString path = reply->url().path();
+    int userId = path.section('/', -2, -2).toInt();
+    QString fullUrl = reply->url().toString();
+    
+    qDebug() << "BackendClient: handleUserFingersRetrieved called for user" << userId << "URL:" << fullUrl;
+    qDebug() << "BackendClient: Reply error:" << reply->error() << "Error string:" << reply->errorString();
+    qDebug() << "BackendClient: HTTP status:" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    
     if (reply->error() != QNetworkReply::NoError) {
-        // Extract userId from URL before emitting error
-        QString path = reply->url().path();
-        int userId = path.section('/', -2, -2).toInt();
-        
         emit error(QString("Failed to get user fingers: %1").arg(reply->errorString()));
-        qDebug() << "BackendClient: Error getting user fingers:" << reply->errorString();
+        qDebug() << "BackendClient: Error getting user fingers:" << reply->errorString() << "URL:" << fullUrl;
         
         // Emit empty list so UI can handle it
         emit userFingersRetrieved(userId, QStringList());
@@ -316,15 +327,16 @@ void BackendClient::handleUserFingersRetrieved(QNetworkReply* reply)
     }
 
     QByteArray data = reply->readAll();
+    qDebug() << "BackendClient: Received data size:" << data.size() << "bytes";
+    qDebug() << "BackendClient: Received data:" << data;
+    
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
     
     if (parseError.error != QJsonParseError::NoError) {
-        QString path = reply->url().path();
-        int userId = path.section('/', -2, -2).toInt();
-        
         emit error(QString("JSON parse error: %1").arg(parseError.errorString()));
-        qDebug() << "BackendClient: JSON parse error:" << parseError.errorString();
+        qDebug() << "BackendClient: JSON parse error:" << parseError.errorString() << "at offset" << parseError.offset;
+        qDebug() << "BackendClient: Raw data:" << data;
         
         // Emit empty list so UI can handle it
         emit userFingersRetrieved(userId, QStringList());
@@ -332,18 +344,17 @@ void BackendClient::handleUserFingersRetrieved(QNetworkReply* reply)
     }
     
     QJsonArray array = doc.array();
+    qDebug() << "BackendClient: Parsed JSON array with" << array.size() << "items";
 
     QStringList fingers;
     for (const QJsonValue& value : array) {
-        fingers.append(value.toString());
+        QString finger = value.toString();
+        fingers.append(finger);
+        qDebug() << "BackendClient: Found finger:" << finger;
     }
 
-    // Extract userId from URL
-    QString path = reply->url().path();
-    int userId = path.section('/', -2, -2).toInt();
-
     emit userFingersRetrieved(userId, fingers);
-    qDebug() << "BackendClient: Retrieved" << fingers.size() << "fingers for user" << userId;
+    qDebug() << "BackendClient: Successfully retrieved" << fingers.size() << "fingers for user" << userId << ":" << fingers;
 }
 
 void BackendClient::handleTemplateStored(QNetworkReply* reply)

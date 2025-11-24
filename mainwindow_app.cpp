@@ -252,7 +252,7 @@ void MainWindowApp::setupUI()
     QHBoxLayout* verifyButtonsLayout = new QHBoxLayout();
     verifyButtonsLayout->setSpacing(10);
     
-    m_btnStartVerify = new QPushButton("Verify (1:1)");
+    m_btnStartVerify = new QPushButton("Verify (1:N)");
     m_btnStartVerify->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #FF9800; color: white; font-weight: bold; } QPushButton:hover { background-color: #e68900; }");
     m_btnStartVerify->setEnabled(false);
     m_btnStartVerify->setMinimumHeight(40);
