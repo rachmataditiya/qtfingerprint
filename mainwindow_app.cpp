@@ -629,6 +629,8 @@ void MainWindowApp::onIdentifyClicked()
     }
     
     m_btnIdentify->setEnabled(false);
+    m_verifyResultLabel->setText("Loading templates...");
+    m_verifyScoreLabel->setText("Please wait...");
     log("=== IDENTIFICATION STARTED ===");
     log("Loading all templates from backend...");
     
