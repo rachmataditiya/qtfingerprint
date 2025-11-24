@@ -679,12 +679,18 @@ void MainWindowApp::onVerifyClicked()
     // Load all templates for this user (all fingers)
     // We'll verify against all of them
     log("Getting user fingers...");
+    
+    // Set a flag to track if we've received response
+    m_verificationWaitingForFingers = true;
+    
     m_backendClient->getUserFingers(m_verificationUserId);
     
-    // Fallback: if getUserFingers doesn't respond in 2 seconds, load template directly
-    QTimer::singleShot(2000, this, [this]() {
-        if (m_verifyResultLabel->text() == "Loading templates..." && m_verificationTemplates.isEmpty()) {
+    // Fallback: if getUserFingers doesn't respond in 3 seconds, load template directly
+    QTimer::singleShot(3000, this, [this]() {
+        if (m_verificationWaitingForFingers && m_verificationTemplates.isEmpty()) {
             log("getUserFingers timeout, loading template directly (most recent)");
+            m_verificationWaitingForFingers = false;
+            m_remainingVerificationFingers.clear(); // Clear to indicate we're loading single template
             m_backendClient->loadTemplate(m_verificationUserId, ""); // Empty = most recent
         }
     });
@@ -940,6 +946,8 @@ void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& finger
     
     // Check if this is for verification
     if (userId == m_verificationUserId) {
+        m_verificationWaitingForFingers = false; // Mark that we received response
+        
         log(QString("User %1 has %2 registered finger(s)").arg(userId).arg(fingers.size()));
         
         if (fingers.isEmpty()) {
@@ -1051,6 +1059,16 @@ void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>&
 void MainWindowApp::onBackendError(const QString& errorMessage)
 {
     log(QString("Backend error: %1").arg(errorMessage));
+    
+    // If we're waiting for verification and got an error, try fallback
+    if (m_verificationWaitingForFingers && m_verificationTemplates.isEmpty()) {
+        log("Backend error during getUserFingers, trying fallback: load most recent template");
+        m_verificationWaitingForFingers = false;
+        m_remainingVerificationFingers.clear();
+        m_backendClient->loadTemplate(m_verificationUserId, ""); // Empty = most recent
+        return;
+    }
+    
     QMessageBox::warning(this, "Backend Error", errorMessage);
 }
 
