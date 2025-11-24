@@ -40,14 +40,7 @@ class FingerprintViewModel(application: Application) : AndroidViewModel(applicat
     val identifyResult: StateFlow<IdentifyResult?> = _identifyResult.asStateFlow()
 
     // Enrollment progress
-    private val _enrollmentProgress = MutableStateFlow<EnrollmentProgress?>(null)
-    val enrollmentProgress: StateFlow<EnrollmentProgress?> = _enrollmentProgress.asStateFlow()
-    
-    data class EnrollmentProgress(
-        val currentScan: Int,
-        val totalScans: Int,
-        val message: String
-    )
+    val enrollmentProgress = FingerprintSdk.enrollmentProgress
 
     init {
         initializeSdk()
@@ -186,7 +179,7 @@ class FingerprintViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.value = _uiState.value.copy(isLoading = true, message = "Verifying fingerprint...")
             _verifyResult.value = null
             try {
-                val result = FingerprintSdk.verify(userId)
+                val result = FingerprintSdk.verify(userId, finger)
                 _verifyResult.value = result
                 when (result) {
                     is VerifyResult.Success -> {
@@ -224,7 +217,7 @@ class FingerprintViewModel(application: Application) : AndroidViewModel(applicat
                     is IdentifyResult.Success -> {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
-                            message = "Identification successful! User ID: ${result.userId}, Score: ${result.score}"
+                            message = "Identification successful! User: ${result.userName} (${result.finger}), Score: ${result.score}"
                         )
                     }
                     is IdentifyResult.Error -> {

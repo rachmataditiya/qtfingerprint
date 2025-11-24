@@ -18,15 +18,15 @@ include_directories(
     ${ANDROID_NDK_PREFIX}/include/gusb-1
     ${ANDROID_NDK_PREFIX}/include/json-glib-1.0
     ${ANDROID_NDK_PREFIX}/include/libusb-1.0
-    # Include existing FingerprintCapture
-    ${CMAKE_SOURCE_DIR}/../../../../../libdigitalpersona/app/src/main/cpp
+    # Include local FingerprintCapture (SDK's own copy)
+    ${CMAKE_SOURCE_DIR}
 )
 
 # Source files
 add_library(arkana_fprint SHARED
     arkana_fprint.cpp
-    # Include existing FingerprintCapture
-    ${CMAKE_SOURCE_DIR}/../../../../../libdigitalpersona/app/src/main/cpp/fingerprint_capture.cpp
+    # Use SDK's own copy of FingerprintCapture
+    fingerprint_capture.cpp
 )
 
 # Link directories

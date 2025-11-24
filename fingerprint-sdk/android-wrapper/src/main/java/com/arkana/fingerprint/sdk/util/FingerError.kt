@@ -8,6 +8,7 @@ enum class FingerError {
     SDK_NOT_INITIALIZED,
     DEVICE_NOT_FOUND,
     DEVICE_INIT_FAILED,
+    DEVICE_PERMISSION_DENIED,
     
     // USB errors
     USB_PERMISSION_DENIED,

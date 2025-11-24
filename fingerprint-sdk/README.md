@@ -77,7 +77,11 @@ val result = FingerprintSdk.identify(scope = "branch_001")
 
 when (result) {
     is IdentifyResult.Success -> {
-        println("User identified: ${result.userId}, Score: ${result.score}")
+        println("User identified: ${result.userName} (${result.userId})")
+        println("Finger: ${result.finger}, Score: ${result.score}")
+        if (result.userEmail != null) {
+            println("Email: ${result.userEmail}")
+        }
     }
     is IdentifyResult.Error -> {
         println("Error: ${result.error}")
@@ -127,10 +131,13 @@ com.arkana.fingerprint.sdk/
 
 ## Documentation
 
-- [API Reference](docs/API_REFERENCE.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Build Instructions](docs/BUILD.md)
-- [Examples](examples/)
+- [Integration Guide](docs/INTEGRATION.md) - How to integrate SDK into your project
+- [Usage Guide](docs/USAGE.md) - Complete usage guide with examples
+- [API Reference](docs/API_REFERENCE.md) - Complete API documentation
+- [Architecture](docs/ARCHITECTURE.md) - System architecture
+- [Backend API](docs/BACKEND_API.md) - Backend API specification
+- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [Examples](examples/) - Code examples
 
 ## License
 
