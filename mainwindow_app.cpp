@@ -1072,7 +1072,6 @@ void MainWindowApp::enableVerificationControls(bool enable)
 {
     m_btnStartVerify->setEnabled(enable && m_fpManager->isReaderOpen());
     m_btnIdentify->setEnabled(enable && m_fpManager->isReaderOpen());
-    m_btnCaptureVerify->setEnabled(!enable);
 }
 
 void MainWindowApp::onEnrollmentProgress(int current, int total, QString message)
