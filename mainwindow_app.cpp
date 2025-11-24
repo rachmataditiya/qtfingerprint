@@ -123,32 +123,48 @@ void MainWindowApp::setupUI()
     leftLayout->addWidget(m_readerGroup);
 
     // Enrollment group
-    m_enrollGroup = new QGroupBox("2. Enrollment (Registration)");
+    m_enrollGroup = new QGroupBox("2. Enrollment");
     QVBoxLayout* enrollLayout = new QVBoxLayout(m_enrollGroup);
     enrollLayout->setSpacing(8);
     enrollLayout->setContentsMargins(15, 15, 15, 15);
     
-    // User info inputs in a grid
+    // User and finger selection in a grid
     QGridLayout* inputGrid = new QGridLayout();
-    inputGrid->setSpacing(5);
+    inputGrid->setSpacing(10);
     
-    QLabel* nameLabel = new QLabel("Name:");
-    nameLabel->setStyleSheet("QLabel { font-weight: bold; }");
-    inputGrid->addWidget(nameLabel, 0, 0);
-    m_editEnrollName = new QLineEdit();
-    m_editEnrollName->setPlaceholderText("Enter user name");
-    m_editEnrollName->setMinimumHeight(30);
-    inputGrid->addWidget(m_editEnrollName, 0, 1);
+    QLabel* userLabel = new QLabel("User:");
+    userLabel->setStyleSheet("QLabel { font-weight: bold; }");
+    m_enrollUserSelect = new QComboBox();
+    m_enrollUserSelect->setPlaceholderText("Select user");
+    m_enrollUserSelect->setMinimumHeight(30);
+    m_enrollUserSelect->setEditable(false);
+    inputGrid->addWidget(userLabel, 0, 0);
+    inputGrid->addWidget(m_enrollUserSelect, 0, 1);
     
-    QLabel* emailLabel = new QLabel("Email:");
-    emailLabel->setStyleSheet("QLabel { font-weight: bold; }");
-    inputGrid->addWidget(emailLabel, 1, 0);
-    m_editEnrollEmail = new QLineEdit();
-    m_editEnrollEmail->setPlaceholderText("Enter email (optional)");
-    m_editEnrollEmail->setMinimumHeight(30);
-    inputGrid->addWidget(m_editEnrollEmail, 1, 1);
+    QLabel* fingerLabel = new QLabel("Finger:");
+    fingerLabel->setStyleSheet("QLabel { font-weight: bold; }");
+    m_enrollFingerSelect = new QComboBox();
+    m_enrollFingerSelect->setMinimumHeight(30);
+    m_enrollFingerSelect->setEditable(false);
+    
+    // Populate finger options
+    QStringList fingers = {"Right Index", "Right Middle", "Right Ring", "Right Pinky", "Right Thumb",
+                           "Left Index", "Left Middle", "Left Ring", "Left Pinky", "Left Thumb"};
+    m_enrollFingerSelect->addItems(fingers);
+    m_enrollFingerSelect->setCurrentText("Right Index"); // Default
+    
+    inputGrid->addWidget(fingerLabel, 1, 0);
+    inputGrid->addWidget(m_enrollFingerSelect, 1, 1);
     
     enrollLayout->addLayout(inputGrid);
+    
+    // Connect user selection to update finger list
+    connect(m_enrollUserSelect, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index >= 0) {
+            int userId = m_enrollUserSelect->itemData(index).toInt();
+            m_backendClient->getUserFingers(userId);
+        }
+    });
     
     // Buttons
     QHBoxLayout* enrollButtonsLayout = new QHBoxLayout();
@@ -406,15 +422,27 @@ void MainWindowApp::onInitializeClicked()
 
 void MainWindowApp::onEnrollClicked()
 {
-    QString name = m_editEnrollName->text().trimmed();
-    QString email = m_editEnrollEmail->text().trimmed();
-    
-    if (name.isEmpty()) {
-        QMessageBox::warning(this, "Input Required", "Please enter a name");
+    // Get selected user
+    int userIndex = m_enrollUserSelect->currentIndex();
+    if (userIndex < 0) {
+        QMessageBox::warning(this, "Selection Required", "Please select a user from the list");
         return;
     }
     
-    // User existence check will be done by backend
+    int userId = m_enrollUserSelect->itemData(userIndex).toInt();
+    QString userName = m_enrollUserSelect->currentText();
+    QString selectedFinger = m_enrollFingerSelect->currentText();
+    
+    // Remove "(enrolled)" suffix if present
+    selectedFinger = selectedFinger.replace(" (enrolled)", "");
+    
+    if (selectedFinger.isEmpty()) {
+        QMessageBox::warning(this, "Selection Required", "Please select a finger");
+        return;
+    }
+    
+    // Check if finger is already enrolled
+    // Note: This will be checked when userFingersRetrieved is called
     
     if (!m_fpManager->startEnrollment()) {
         QMessageBox::critical(this, "Error", m_fpManager->getLastError());
@@ -423,8 +451,9 @@ void MainWindowApp::onEnrollClicked()
     
     m_enrollmentInProgress = true;
     m_enrollmentSampleCount = 0;
-    m_enrollmentUserName = name;
-    m_enrollmentUserEmail = email;
+    m_enrollmentUserId = userId; // Store userId instead of name/email
+    m_enrollmentUserName = userName;
+    m_pendingEnrollmentFinger = selectedFinger;
     
     // Reset progress bar and preview
     m_enrollProgress->setValue(0);
@@ -454,7 +483,7 @@ void MainWindowApp::onEnrollClicked()
     
     m_enrollImagePreview->setPixmap(QPixmap::fromImage(readyImage));
     
-    log(QString("Starting enrollment for: %1 %2").arg(name).arg(email.isEmpty() ? "" : "(" + email + ")"));
+    log(QString("Starting enrollment for user: %1, finger: %2").arg(userName).arg(selectedFinger));
     
     enableEnrollmentControls(false);
     m_btnCaptureEnroll->setEnabled(true);
@@ -540,14 +569,14 @@ void MainWindowApp::processEnrollmentResult(int result)
         
         log(QString("Template created, size: %1 bytes").arg(templateData.size()));
         
-        // Create user and store template via backend API
+        // Store template for user (user already exists, just enroll finger)
         m_pendingEnrollmentTemplate = templateData;
-        m_pendingEnrollmentFinger = "Right Index"; // Default finger
-        m_backendClient->createUser(m_enrollmentUserName, m_enrollmentUserEmail);
-        // Note: template will be stored in onUserCreated slot after user is created
+        // m_pendingEnrollmentFinger already set in onEnrollClicked
+        // m_enrollmentUserId already set in onEnrollClicked
         
-        m_editEnrollName->clear();
-        m_editEnrollEmail->clear();
+        // Store template directly (user already exists)
+        log(QString("Storing template for user ID: %1, finger: %2").arg(m_enrollmentUserId).arg(m_pendingEnrollmentFinger));
+        m_backendClient->storeTemplate(m_enrollmentUserId, templateData, m_pendingEnrollmentFinger);
         
         log("Cleaning up enrollment session...");
         m_fpManager->cancelEnrollment();
@@ -641,10 +670,22 @@ void MainWindowApp::onVerifyClicked()
     m_verifyScoreLabel->setText("Please wait...");
     log(QString("Verification started for user ID: %1").arg(m_verificationUserId));
     
+    // Reset verification state
+    m_verificationTemplates.clear();
+    m_remainingVerificationFingers.clear();
+    
     // Load all templates for this user (all fingers)
     // We'll verify against all of them
-    log("Loading all templates for user...");
+    log("Getting user fingers...");
     m_backendClient->getUserFingers(m_verificationUserId);
+    
+    // Fallback: if getUserFingers doesn't respond in 2 seconds, load template directly
+    QTimer::singleShot(2000, this, [this]() {
+        if (m_verifyResultLabel->text() == "Loading templates..." && m_verificationTemplates.isEmpty()) {
+            log("getUserFingers timeout, loading template directly (most recent)");
+            m_backendClient->loadTemplate(m_verificationUserId, ""); // Empty = most recent
+        }
+    });
 }
 
 void MainWindowApp::onCaptureVerifySample()
@@ -734,12 +775,9 @@ void MainWindowApp::onUsersListed(const QVector<User>& users)
 void MainWindowApp::onUserCreated(int userId)
 {
     log(QString("User created: ID %1").arg(userId));
-    // Store template after user is created
-    if (!m_pendingEnrollmentTemplate.isEmpty()) {
-        m_backendClient->storeTemplate(userId, m_pendingEnrollmentTemplate, m_pendingEnrollmentFinger);
-        m_pendingEnrollmentTemplate.clear();
-    }
-    m_backendClient->listUsers();
+    // User creation is now separate from enrollment
+    // Enrollment happens for existing users only
+    m_backendClient->listUsers(); // Refresh user list
 }
 
 void MainWindowApp::onTemplateStored(int userId, const QString& finger)
@@ -840,6 +878,27 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
 
 void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& fingers)
 {
+    // Check if this is for enrollment (user selected in enrollment dropdown)
+    if (m_enrollUserSelect->currentData().toInt() == userId) {
+        // Update finger selection - disable already enrolled fingers
+        log(QString("User %1 has %2 enrolled finger(s): %3").arg(userId).arg(fingers.size()).arg(fingers.join(", ")));
+        
+        // Check if currently selected finger is already enrolled
+        QString currentFinger = m_enrollFingerSelect->currentText().replace(" (enrolled)", "");
+        if (fingers.contains(currentFinger)) {
+            // Select first non-enrolled finger
+            QStringList allFingers = {"Right Index", "Right Middle", "Right Ring", "Right Pinky", "Right Thumb",
+                                      "Left Index", "Left Middle", "Left Ring", "Left Pinky", "Left Thumb"};
+            for (const QString& finger : allFingers) {
+                if (!fingers.contains(finger)) {
+                    m_enrollFingerSelect->setCurrentText(finger);
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Check if this is for verification
     if (userId == m_verificationUserId) {
         log(QString("User %1 has %2 registered finger(s)").arg(userId).arg(fingers.size()));
         
@@ -850,6 +909,8 @@ void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& finger
             m_btnStartVerify->setEnabled(true);
             m_verifyResultLabel->setText("Result: No fingerprints");
             m_verifyScoreLabel->setText("Score: -");
+            m_verificationTemplates.clear();
+            m_remainingVerificationFingers.clear();
             return;
         }
         
@@ -946,8 +1007,8 @@ void MainWindowApp::onBackendError(const QString& errorMessage)
 
 void MainWindowApp::enableEnrollmentControls(bool enable)
 {
-    m_editEnrollName->setEnabled(enable);
-    m_editEnrollEmail->setEnabled(enable);
+    m_enrollUserSelect->setEnabled(enable);
+    m_enrollFingerSelect->setEnabled(enable);
     m_btnStartEnroll->setEnabled(enable && m_fpManager->isReaderOpen());
     m_btnCaptureEnroll->setEnabled(!enable);
 }

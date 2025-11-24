@@ -11,6 +11,7 @@
 #include <QProgressBar>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QComboBox>
 
 // DigitalPersona Library
 #include <digitalpersona.h>
@@ -72,8 +73,8 @@ private:
     // Enrollment state
     bool m_enrollmentInProgress;
     int m_enrollmentSampleCount;
+    int m_enrollmentUserId; // User ID for enrollment
     QString m_enrollmentUserName;
-    QString m_enrollmentUserEmail;
     QByteArray m_pendingEnrollmentTemplate;
     QString m_pendingEnrollmentFinger;
     
@@ -99,8 +100,8 @@ private:
     QPushButton* m_btnInitialize;
     
     QGroupBox* m_enrollGroup;
-    QLineEdit* m_editEnrollName;
-    QLineEdit* m_editEnrollEmail;
+    QComboBox* m_enrollUserSelect; // User selection dropdown
+    QComboBox* m_enrollFingerSelect; // Finger selection dropdown
     QPushButton* m_btnStartEnroll;
     QPushButton* m_btnCaptureEnroll;
     QProgressBar* m_enrollProgress;
