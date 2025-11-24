@@ -7,6 +7,9 @@
 #include <map>
 #include <functional>
 
+// Forward declaration
+class FingerprintCapture;
+
 /**
  * @brief Device information structure (Android version)
  */
@@ -138,7 +141,6 @@ public:
     
 private:
     // libfprint capture instance
-    class FingerprintCapture;
     FingerprintCapture* m_capture;
     JNIEnv* m_jniEnv;
     jobject m_context;

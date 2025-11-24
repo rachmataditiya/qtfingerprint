@@ -75,43 +75,8 @@ Java_com_arkana_libdigitalpersona_FingerprintJNI_nativeStartEnrollment(JNIEnv* e
     return manager->startEnrollment(userId) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL
-Java_com_arkana_libdigitalpersona_FingerprintJNI_nativeVerifyFingerprint(JNIEnv* env, jclass clazz, jlong nativePtr, jint userId, jintArray scoreOut) {
-    if (!nativePtr) return JNI_FALSE;
-    FingerprintManagerAndroid* manager = reinterpret_cast<FingerprintManagerAndroid*>(nativePtr);
-    int score = 0;
-    bool result = manager->verifyFingerprint(userId, score);
-    
-    if (scoreOut && env->GetArrayLength(scoreOut) > 0) {
-        jint* scorePtr = env->GetIntArrayElements(scoreOut, nullptr);
-        scorePtr[0] = score;
-        env->ReleaseIntArrayElements(scoreOut, scorePtr, 0);
-    }
-    
-    return result ? JNI_TRUE : JNI_FALSE;
-}
-
-JNIEXPORT jint JNICALL
-Java_com_arkana_libdigitalpersona_FingerprintJNI_nativeIdentifyUser(JNIEnv* env, jclass clazz, jlong nativePtr, jintArray userIds, jintArray scoreOut) {
-    if (!nativePtr || !userIds) return -1;
-    FingerprintManagerAndroid* manager = reinterpret_cast<FingerprintManagerAndroid*>(nativePtr);
-    
-    jsize len = env->GetArrayLength(userIds);
-    jint* ids = env->GetIntArrayElements(userIds, nullptr);
-    std::vector<int> idVec(ids, ids + len);
-    env->ReleaseIntArrayElements(userIds, ids, JNI_ABORT);
-    
-    int score = 0;
-    int matchedUserId = manager->identifyUser(idVec, score);
-    
-    if (scoreOut && env->GetArrayLength(scoreOut) > 0) {
-        jint* scorePtr = env->GetIntArrayElements(scoreOut, nullptr);
-        scorePtr[0] = score;
-        env->ReleaseIntArrayElements(scoreOut, scorePtr, 0);
-    }
-    
-    return matchedUserId;
-}
+// Removed: nativeVerifyFingerprint and nativeIdentifyUser (old versions using userId/userIds)
+// Replaced by nativeMatchWithTemplate and nativeIdentifyWithTemplates (using templates)
 
 JNIEXPORT void JNICALL
 Java_com_arkana_libdigitalpersona_FingerprintJNI_nativeCancel(JNIEnv* env, jclass clazz, jlong nativePtr) {

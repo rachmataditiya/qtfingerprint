@@ -13,7 +13,8 @@ project("libdigitalpersona")
 
 # Path to Android NDK prefix (where libfprint and dependencies are installed)
 # This should be set to the android-ndk-prefix directory created by build scripts
-set(ANDROID_NDK_PREFIX "${CMAKE_SOURCE_DIR}/../../../../android-ndk-prefix")
+# CMAKE_SOURCE_DIR is libdigitalpersona/app/src/main/cpp, so we need to go up 5 levels
+get_filename_component(ANDROID_NDK_PREFIX "${CMAKE_SOURCE_DIR}/../../../../../android-ndk-prefix" ABSOLUTE)
 
 # Include directories for libfprint and dependencies
 include_directories(
@@ -22,6 +23,14 @@ include_directories(
     ${ANDROID_NDK_PREFIX}/include/glib-2.0
     ${ANDROID_NDK_PREFIX}/lib/glib-2.0/include
 )
+
+# Debug: Print include paths
+message(STATUS "ANDROID_NDK_PREFIX: ${ANDROID_NDK_PREFIX}")
+message(STATUS "Include paths:")
+message(STATUS "  ${ANDROID_NDK_PREFIX}/include")
+message(STATUS "  ${ANDROID_NDK_PREFIX}/include/libfprint-2")
+message(STATUS "  ${ANDROID_NDK_PREFIX}/include/glib-2.0")
+message(STATUS "  ${ANDROID_NDK_PREFIX}/lib/glib-2.0/include")
 
 # Creates and names a library, sets it as either STATIC
 # or SHARED, and provides the relative paths to its source code.
