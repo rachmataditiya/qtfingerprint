@@ -141,7 +141,124 @@ class BackendClient(private val baseUrl: String) {
             }
         }
     }
+
+    /**
+     * List all users.
+     */
+    suspend fun listUsers(): BackendResult = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/users")
+                .get()
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string()
+                val jsonArray = org.json.JSONArray(body)
+                val users = mutableListOf<UserInfo>()
+                
+                for (i in 0 until jsonArray.length()) {
+                    val item = jsonArray.getJSONObject(i)
+                    users.add(UserInfo(
+                        id = item.getInt("id"),
+                        name = item.getString("name"),
+                        email = if (item.has("email") && !item.isNull("email")) item.getString("email") else null,
+                        fingerCount = item.getInt("finger_count")
+                    ))
+                }
+                
+                BackendResult.Users(users)
+            } else {
+                BackendResult.Error(FingerError.BACKEND_ERROR)
+            }
+        } catch (e: Exception) {
+            BackendResult.Error(FingerError.NETWORK_ERROR)
+        }
+    }
+
+    /**
+     * Create a new user.
+     */
+    suspend fun createUser(name: String, email: String?): BackendResult = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject().apply {
+                put("name", name)
+                if (email != null && email.isNotBlank()) {
+                    put("email", email)
+                }
+            }
+
+            val request = Request.Builder()
+                .url("$baseUrl/users")
+                .post(json.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string()
+                val json = JSONObject(body)
+                val user = UserInfo(
+                    id = json.getInt("id"),
+                    name = json.getString("name"),
+                    email = if (json.has("email") && !json.isNull("email")) json.getString("email") else null,
+                    fingerCount = json.getInt("finger_count")
+                )
+                BackendResult.UserCreated(user)
+            } else {
+                val errorBody = response.body?.string()
+                val errorMessage = try {
+                    val errorJson = JSONObject(errorBody)
+                    errorJson.getString("error")
+                } catch (e: Exception) {
+                    "Failed to create user"
+                }
+                BackendResult.Error(FingerError.BACKEND_ERROR, errorMessage)
+            }
+        } catch (e: Exception) {
+            BackendResult.Error(FingerError.NETWORK_ERROR, e.message ?: "Network error")
+        }
+    }
+
+    /**
+     * Get user fingers.
+     */
+    suspend fun getUserFingers(userId: Int): BackendResult = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/users/$userId/fingers")
+                .get()
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string()
+                val jsonArray = org.json.JSONArray(body)
+                val fingers = mutableListOf<String>()
+                
+                for (i in 0 until jsonArray.length()) {
+                    fingers.add(jsonArray.getString(i))
+                }
+                
+                BackendResult.Fingers(fingers)
+            } else {
+                BackendResult.Error(FingerError.BACKEND_ERROR)
+            }
+        } catch (e: Exception) {
+            BackendResult.Error(FingerError.NETWORK_ERROR)
+        }
+    }
 }
+
+/**
+ * User information from backend.
+ */
+data class UserInfo(
+    val id: Int,
+    val name: String,
+    val email: String?,
+    val fingerCount: Int
+)
 
 /**
  * Backend operation result.
@@ -150,5 +267,8 @@ sealed class BackendResult {
     object Success : BackendResult()
     data class Template(val template: ByteArray) : BackendResult()
     data class Templates(val templates: Map<Int, ByteArray>) : BackendResult()
-    data class Error(val error: FingerError) : BackendResult()
+    data class Users(val users: List<UserInfo>) : BackendResult()
+    data class UserCreated(val user: UserInfo) : BackendResult()
+    data class Fingers(val fingers: List<String>) : BackendResult()
+    data class Error(val error: FingerError, val message: String? = null) : BackendResult()
 }
