@@ -761,15 +761,37 @@ void MainWindowApp::onUsersListed(const QVector<User>& users)
 {
     m_userList->clear();
     
+    // Also populate enrollment user dropdown
+    int currentEnrollUserId = -1;
+    if (m_enrollUserSelect->currentIndex() >= 0) {
+        currentEnrollUserId = m_enrollUserSelect->itemData(m_enrollUserSelect->currentIndex()).toInt();
+    }
+    
+    m_enrollUserSelect->clear();
+    
     for (const User& user : users) {
         QString displayText = QString("%1 - %2 (%3 fingers)").arg(user.name).arg(user.email.isEmpty() ? "No email" : user.email).arg(user.fingerCount);
         QListWidgetItem* item = new QListWidgetItem(displayText);
         item->setData(Qt::UserRole, user.id);
         m_userList->addItem(item);
+        
+        // Add to enrollment dropdown
+        QString enrollDisplayText = QString("%1%2").arg(user.name).arg(user.email.isEmpty() ? "" : QString(" (%1)").arg(user.email));
+        m_enrollUserSelect->addItem(enrollDisplayText, user.id);
     }
     
     m_userCountLabel->setText(QString("Total users: %1").arg(users.size()));
     log(QString("User list updated: %1 users").arg(users.size()));
+    
+    // Restore enrollment user selection if it was set
+    if (currentEnrollUserId > 0) {
+        for (int i = 0; i < m_enrollUserSelect->count(); ++i) {
+            if (m_enrollUserSelect->itemData(i).toInt() == currentEnrollUserId) {
+                m_enrollUserSelect->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
 }
 
 void MainWindowApp::onUserCreated(int userId)
@@ -819,32 +841,40 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
     }
     
     m_verifyResultLabel->setText("Capturing...");
-    m_verifyScoreLabel->setText("Please wait...");
+    m_verifyScoreLabel->setText("Place finger on reader...");
     QApplication::processEvents();
     
-    // Try to verify against all templates
-    // Capture fingerprint once and verify against all templates
+    // IMPORTANT: verifyFingerprint captures fingerprint each time it's called
+    // So we need to capture once and compare against all templates
+    // Use identifyUser which captures once and compares against all templates
+    
+    // Convert templates to format for identifyUser (which captures once)
+    QVector<QPair<int, QByteArray>> verifyTemplates;
+    
+    for (int i = 0; i < m_verificationTemplates.size(); ++i) {
+        const BackendFingerprintTemplate& tmpl = m_verificationTemplates[i];
+        verifyTemplates.append(QPair<int, QByteArray>(tmpl.userId, tmpl.templateData));
+    }
+    
+    // Use identifyUser which captures once and compares against all templates
+    int score = 0;
+    int matchedIndex = -1;
+    bool success = m_fpManager->identifyUser(verifyTemplates, matchedIndex, score);
+    
     bool foundMatch = false;
-    int bestScore = 0;
     BackendFingerprintTemplate matchedTemplate;
     
-    for (const BackendFingerprintTemplate& tmpl : m_verificationTemplates) {
-        int score = 0;
-        bool matched = m_fpManager->verifyFingerprint(tmpl.templateData, score);
-        
-        log(QString("Verifying against finger %1: score=%2, matched=%3").arg(tmpl.finger).arg(score).arg(matched));
-        
-        if (matched && score >= 60) {
-            // Found a match!
-            foundMatch = true;
-            matchedTemplate = tmpl;
-            bestScore = score;
-            break; // Stop at first match
-        } else if (score > bestScore) {
-            // Keep track of best score even if not matched
-            bestScore = score;
-        }
+    if (success && matchedIndex >= 0 && matchedIndex < m_verificationTemplates.size()) {
+        // Found a match!
+        foundMatch = true;
+        matchedTemplate = m_verificationTemplates[matchedIndex];
+        log(QString("VERIFICATION MATCH: finger %1, score %2%").arg(matchedTemplate.finger).arg(score));
+    } else {
+        // No match found, but log what we tried
+        log(QString("VERIFICATION: No match found after trying %1 finger(s), best score: %2%").arg(m_verificationTemplates.size()).arg(score));
     }
+    
+    int bestScore = score;
     
     // Use stored user info
     QString userName = m_verificationUserName.isEmpty() ? 
