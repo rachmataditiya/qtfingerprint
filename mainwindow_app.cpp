@@ -56,6 +56,7 @@ MainWindowApp::MainWindowApp(QWidget *parent)
     connect(m_backendClient, &BackendClient::templateStored, this, &MainWindowApp::onTemplateStored);
     connect(m_backendClient, &BackendClient::templateLoaded, this, &MainWindowApp::onTemplateLoaded);
     connect(m_backendClient, &BackendClient::templatesLoaded, this, &MainWindowApp::onTemplatesLoaded);
+    connect(m_backendClient, &BackendClient::userFingersRetrieved, this, &MainWindowApp::onUserFingersRetrieved);
     connect(m_backendClient, &BackendClient::error, this, &MainWindowApp::onBackendError);
     
     log("Backend initialized successfully");
@@ -113,7 +114,7 @@ void MainWindowApp::setupUI()
     QVBoxLayout* readerLayout = new QVBoxLayout(m_readerGroup);
     
     m_btnInitialize = new QPushButton("Initialize Reader");
-    m_btnInitialize->setStyleSheet("QPushButton { padding: 10px; font-size: 14px; }");
+    m_btnInitialize->setStyleSheet("QPushButton { padding: 10px; font-size: 14px; } QPushButton:disabled { background-color: #cccccc; color: #666666; }");
     readerLayout->addWidget(m_btnInitialize);
     
     m_readerStatusLabel = new QLabel("Reader: Not connected");
@@ -171,13 +172,13 @@ void MainWindowApp::setupUI()
     enrollButtonsLayout->setSpacing(10);
     
     m_btnStartEnroll = new QPushButton("Start Enrollment");
-    m_btnStartEnroll->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #4CAF50; color: white; font-weight: bold; } QPushButton:hover { background-color: #45a049; }");
+    m_btnStartEnroll->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #4CAF50; color: white; font-weight: bold; } QPushButton:hover { background-color: #45a049; } QPushButton:disabled { background-color: #cccccc; color: #666666; }");
     m_btnStartEnroll->setEnabled(false);
     m_btnStartEnroll->setMinimumHeight(40);
     enrollButtonsLayout->addWidget(m_btnStartEnroll);
     
     m_btnCaptureEnroll = new QPushButton("Capture Fingerprint");
-    m_btnCaptureEnroll->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #2196F3; color: white; font-weight: bold; } QPushButton:hover { background-color: #0b7dda; }");
+    m_btnCaptureEnroll->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #2196F3; color: white; font-weight: bold; } QPushButton:hover { background-color: #0b7dda; } QPushButton:disabled { background-color: #cccccc; color: #666666; }");
     m_btnCaptureEnroll->setEnabled(false);
     m_btnCaptureEnroll->setMinimumHeight(40);
     enrollButtonsLayout->addWidget(m_btnCaptureEnroll);
@@ -253,13 +254,13 @@ void MainWindowApp::setupUI()
     verifyButtonsLayout->setSpacing(10);
     
     m_btnStartVerify = new QPushButton("Verify (1:N)");
-    m_btnStartVerify->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #FF9800; color: white; font-weight: bold; } QPushButton:hover { background-color: #e68900; }");
+    m_btnStartVerify->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #FF9800; color: white; font-weight: bold; } QPushButton:hover { background-color: #e68900; } QPushButton:disabled { background-color: #cccccc; color: #666666; }");
     m_btnStartVerify->setEnabled(false);
     m_btnStartVerify->setMinimumHeight(40);
     verifyButtonsLayout->addWidget(m_btnStartVerify);
     
     m_btnIdentify = new QPushButton("Identify (1:N)");
-    m_btnIdentify->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #673AB7; color: white; font-weight: bold; } QPushButton:hover { background-color: #5E35B1; }");
+    m_btnIdentify->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #673AB7; color: white; font-weight: bold; } QPushButton:hover { background-color: #5E35B1; } QPushButton:disabled { background-color: #cccccc; color: #666666; }");
     m_btnIdentify->setEnabled(false);
     m_btnIdentify->setMinimumHeight(40);
     verifyButtonsLayout->addWidget(m_btnIdentify);
@@ -314,7 +315,7 @@ void MainWindowApp::setupUI()
     userButtonsLayout->setSpacing(8);
     
     m_btnRefreshList = new QPushButton("Refresh");
-    m_btnRefreshList->setStyleSheet("QPushButton { padding: 8px; font-size: 12px; background-color: #4CAF50; color: white; font-weight: bold; } QPushButton:hover { background-color: #45a049; }");
+    m_btnRefreshList->setStyleSheet("QPushButton { padding: 8px; font-size: 12px; background-color: #4CAF50; color: white; font-weight: bold; } QPushButton:hover { background-color: #45a049; } QPushButton:disabled { background-color: #cccccc; color: #666666; }");
     m_btnRefreshList->setMinimumHeight(35);
     userButtonsLayout->addWidget(m_btnRefreshList);
     
@@ -336,7 +337,7 @@ void MainWindowApp::setupUI()
     
     m_btnConfig = new QPushButton("Database Config");
     m_btnConfig->setCursor(Qt::PointingHandCursor);
-    m_btnConfig->setStyleSheet("QPushButton { padding: 6px; font-size: 11px; background-color: #607d8b; color: white; border-radius: 3px; } QPushButton:hover { background-color: #546e7a; }");
+    m_btnConfig->setStyleSheet("QPushButton { padding: 6px; font-size: 11px; background-color: #607d8b; color: white; border-radius: 3px; } QPushButton:hover { background-color: #546e7a; } QPushButton:disabled { background-color: #cccccc; color: #666666; }");
     logLayout->addWidget(m_btnConfig);
     
     m_logText = new QTextEdit();
@@ -347,7 +348,7 @@ void MainWindowApp::setupUI()
     logLayout->addWidget(m_logText);
     
     m_btnClearLog = new QPushButton("Clear Log");
-    m_btnClearLog->setStyleSheet("QPushButton { padding: 6px; font-size: 11px; background-color: #757575; color: white; } QPushButton:hover { background-color: #616161; }");
+    m_btnClearLog->setStyleSheet("QPushButton { padding: 6px; font-size: 11px; background-color: #757575; color: white; } QPushButton:hover { background-color: #616161; } QPushButton:disabled { background-color: #cccccc; color: #666666; }");
     m_btnClearLog->setMinimumHeight(30);
     logLayout->addWidget(m_btnClearLog);
     
@@ -418,7 +419,8 @@ void MainWindowApp::onEnrollClicked()
     // Get selected user
     int userIndex = m_enrollUserSelect->currentIndex();
     if (userIndex < 0) {
-        QMessageBox::warning(this, "Selection Required", "Please select a user from the list");
+        m_enrollStatusLabel->setText("Please select a user from the list");
+        m_enrollStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
         return;
     }
     
@@ -430,7 +432,8 @@ void MainWindowApp::onEnrollClicked()
     selectedFinger = selectedFinger.replace(" (enrolled)", "");
     
     if (selectedFinger.isEmpty()) {
-        QMessageBox::warning(this, "Selection Required", "Please select a finger");
+        m_enrollStatusLabel->setText("Please select a finger");
+        m_enrollStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
         return;
     }
     
@@ -438,7 +441,9 @@ void MainWindowApp::onEnrollClicked()
     // Note: This will be checked when userFingersRetrieved is called
     
     if (!m_fpManager->startEnrollment()) {
-        QMessageBox::critical(this, "Error", m_fpManager->getLastError());
+        m_enrollStatusLabel->setText(QString("Error: %1").arg(m_fpManager->getLastError()));
+        m_enrollStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+        log(QString("Enrollment error: %1").arg(m_fpManager->getLastError()));
         return;
     }
     
@@ -490,9 +495,11 @@ void MainWindowApp::onCaptureEnrollSample()
     
     // Check if device is still open
     if (!m_fpManager->isReaderOpen()) {
-        QMessageBox::warning(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
+        m_enrollStatusLabel->setText("Device not ready. Please initialize reader first.");
+        m_enrollStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
         m_enrollmentInProgress = false;
         enableEnrollmentControls(true);
+        log("Enrollment failed: Device not open");
         return;
     }
     
@@ -634,13 +641,18 @@ void MainWindowApp::onIdentifyClicked()
 void MainWindowApp::onVerifyClicked()
 {
     if (m_userList->selectedItems().isEmpty()) {
-        QMessageBox::warning(this, "Selection Required", "Please select a user from the list");
+        m_verifyResultLabel->setText("Please select a user");
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #fff3cd; color: #856404; padding: 10px; font-weight: bold; font-size: 14px; }");
+        m_verifyScoreLabel->setText("No user selected");
         return;
     }
     
     // Check if device is still open
     if (!m_fpManager->isReaderOpen()) {
-        QMessageBox::warning(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
+        m_verifyResultLabel->setText("Device not ready");
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
+        m_verifyScoreLabel->setText("Please initialize reader first");
+        log("Verification failed: Device not open");
         return;
     }
     
@@ -803,16 +815,19 @@ void MainWindowApp::onUserCreated(int userId)
 void MainWindowApp::onTemplateStored(int userId, const QString& finger)
 {
     log(QString("Template stored for user %1, finger %2").arg(userId).arg(finger));
-    QMessageBox::information(this, "Enrollment Complete", 
-        QString("User enrolled successfully!\n\nUser ID: %1\nFinger: %2").arg(userId).arg(finger));
+    m_enrollStatusLabel->setText(QString("✓ Enrollment Complete: User %1, Finger %2").arg(userId).arg(finger));
+    m_enrollStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; }");
     m_backendClient->listUsers();
 }
 
 void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
 {
+    log(QString("onTemplateLoaded called: userId=%1, finger=%2, verificationUserId=%3").arg(tmpl.userId).arg(tmpl.finger).arg(m_verificationUserId));
+    
     // Check if this is for verification (userId matches)
     if (tmpl.userId != m_verificationUserId) {
         // Not for verification, ignore
+        log(QString("Template ignored: userId mismatch (%1 != %2)").arg(tmpl.userId).arg(m_verificationUserId));
         return;
     }
     
@@ -838,15 +853,19 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
     
     // Check if device is still open
     if (!m_fpManager->isReaderOpen()) {
-        QMessageBox::critical(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
+        m_verifyResultLabel->setText("Device not ready");
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
+        m_verifyScoreLabel->setText("Please initialize reader first");
         m_btnStartVerify->setEnabled(true);
         m_verificationTemplates.clear();
         m_remainingVerificationFingers.clear();
+        log("Verification failed: Device not open");
         return;
     }
     
-    m_verifyResultLabel->setText("Capturing...");
-    m_verifyScoreLabel->setText("Place finger on reader...");
+    m_verifyResultLabel->setText("Place finger on reader...");
+    m_verifyResultLabel->setStyleSheet("QLabel { background-color: #e3f2fd; color: #1976d2; padding: 10px; font-weight: bold; font-size: 14px; }");
+    m_verifyScoreLabel->setText("Waiting for fingerprint...");
     QApplication::processEvents();
     
     // IMPORTANT: verifyFingerprint captures fingerprint each time it's called
@@ -888,19 +907,14 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
     
     if (foundMatch) {
         m_verifyScoreLabel->setText(QString("Match Score: %1%").arg(bestScore));
-        m_verifyResultLabel->setText(QString("MATCH: %1").arg(userName));
-        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: green; padding: 10px; font-weight: bold; font-size: 14px; }");
+        m_verifyResultLabel->setText(QString("✓ MATCH: %1 (%2)").arg(userName).arg(matchedTemplate.finger));
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: #2e7d32; padding: 10px; font-weight: bold; font-size: 14px; }");
         log(QString("VERIFICATION SUCCESS: %1 (finger: %2, score: %3%)").arg(userName).arg(matchedTemplate.finger).arg(bestScore));
-        QMessageBox::information(this, "Verification Success", 
-            QString("Fingerprint MATCHED!\n\nUser: %1\nFinger: %2\nScore: %3%").arg(userName).arg(matchedTemplate.finger).arg(bestScore));
     } else {
         m_verifyScoreLabel->setText(QString("Best Score: %1%").arg(bestScore));
-        m_verifyResultLabel->setText(QString("NO MATCH"));
-        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
+        m_verifyResultLabel->setText(QString("✗ NO MATCH"));
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: #c62828; padding: 10px; font-weight: bold; font-size: 14px; }");
         log(QString("VERIFICATION FAILED: Tried %1 finger(s), best score: %2%").arg(m_verificationTemplates.size()).arg(bestScore));
-        QMessageBox::warning(this, "Verification Failed", 
-            QString("Fingerprint does NOT match any registered finger!\n\nUser: %1\nTried: %2 finger(s)\nBest Score: %3%")
-                .arg(userName).arg(m_verificationTemplates.size()).arg(bestScore));
     }
     
     // Cleanup
@@ -939,14 +953,13 @@ void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& finger
         log(QString("User %1 has %2 registered finger(s)").arg(userId).arg(fingers.size()));
         
         if (fingers.isEmpty()) {
-            QMessageBox::warning(this, "No Fingerprints", 
-                QString("User %1 has no registered fingerprints. Please enroll a fingerprint first.")
-                .arg(m_verificationUserName.isEmpty() ? QString::number(userId) : m_verificationUserName));
             m_btnStartVerify->setEnabled(true);
-            m_verifyResultLabel->setText("Result: No fingerprints");
-            m_verifyScoreLabel->setText("Score: -");
+            m_verifyResultLabel->setText("No fingerprints found");
+            m_verifyResultLabel->setStyleSheet("QLabel { background-color: #fff3cd; color: #856404; padding: 10px; font-weight: bold; font-size: 14px; }");
+            m_verifyScoreLabel->setText(QString("User %1 has no registered fingerprints").arg(m_verificationUserName.isEmpty() ? QString::number(userId) : m_verificationUserName));
             m_verificationTemplates.clear();
             m_remainingVerificationFingers.clear();
+            log(QString("Verification failed: User %1 has no registered fingerprints").arg(userId));
             return;
         }
         
@@ -961,12 +974,14 @@ void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& finger
         // Load first template to start verification process
         // We'll load others as needed
         QString firstFinger = fingers.first();
-        log(QString("Loading template for finger: %1").arg(firstFinger));
+        log(QString("Loading template for user %1, finger: %2").arg(m_verificationUserId).arg(firstFinger));
         m_backendClient->loadTemplate(m_verificationUserId, firstFinger);
         
         // Store remaining fingers to load
         m_remainingVerificationFingers = fingers;
         m_remainingVerificationFingers.removeFirst(); // Remove first one as we're loading it now
+        
+        log(QString("Remaining fingers to load: %1").arg(m_remainingVerificationFingers.join(", ")));
     }
 }
 
@@ -976,25 +991,28 @@ void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>&
     log(QString("Loaded %1 templates for identification").arg(templates.size()));
     
     if (templates.isEmpty()) {
-        QMessageBox::warning(this, "No Templates", "No fingerprint templates found. Please enroll users first.");
         m_btnIdentify->setEnabled(true);
-        m_verifyResultLabel->setText("Result: No templates");
-        m_verifyScoreLabel->setText("Score: -");
+        m_verifyResultLabel->setText("No templates found");
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #fff3cd; color: #856404; padding: 10px; font-weight: bold; font-size: 14px; }");
+        m_verifyScoreLabel->setText("Please enroll users first");
+        log("Identification failed: No templates found");
         return;
     }
     
     // Check if device is still open
     if (!m_fpManager->isReaderOpen()) {
-        QMessageBox::critical(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
         m_btnIdentify->setEnabled(true);
-        m_verifyResultLabel->setText("Result: Device not ready");
-        m_verifyScoreLabel->setText("Score: -");
+        m_verifyResultLabel->setText("Device not ready");
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
+        m_verifyScoreLabel->setText("Please initialize reader first");
+        log("Identification failed: Device not open");
         return;
     }
     
     // Update UI for identification
-    m_verifyResultLabel->setText("Identifying...");
-    m_verifyScoreLabel->setText("Place finger on reader...");
+    m_verifyResultLabel->setText("Place finger on reader...");
+    m_verifyResultLabel->setStyleSheet("QLabel { background-color: #e3f2fd; color: #1976d2; padding: 10px; font-weight: bold; font-size: 14px; }");
+    m_verifyScoreLabel->setText("Waiting for fingerprint...");
     QApplication::processEvents();
     
     // Prepare templates vector for identifyUser (like Android implementation)
@@ -1015,7 +1033,9 @@ void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>&
     if (!success) {
         QString error = m_fpManager->getLastError();
         log(QString("Identification error: %1").arg(error));
-        QMessageBox::critical(this, "Identification Error", error);
+        m_verifyResultLabel->setText("Identification error");
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
+        m_verifyScoreLabel->setText(error);
         m_btnIdentify->setEnabled(true);
         return;
     }
@@ -1031,13 +1051,14 @@ void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>&
         log(QString("✓ IDENTIFICATION SUCCESS: %1 (User ID: %2, Finger: %3, Score: %4%)")
             .arg(matchedUserName).arg(matchedUserId).arg(matchedFinger).arg(score));
         
-        QMessageBox::information(this, "Identification Success", 
-            QString("User IDENTIFIED!\n\nUser: %1\nUser ID: %2\nFinger: %3\nScore: %4%")
-            .arg(matchedUserName).arg(matchedUserId).arg(matchedFinger).arg(score));
+        m_verifyScoreLabel->setText(QString("Match Score: %1%").arg(score));
+        m_verifyResultLabel->setText(QString("✓ IDENTIFIED: %1 (%2)").arg(matchedUserName).arg(matchedFinger));
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: #2e7d32; padding: 10px; font-weight: bold; font-size: 14px; }");
     } else {
         log(QString("✗ IDENTIFICATION FAILED: No match found (score: %1%)").arg(score));
-        QMessageBox::warning(this, "Identification Failed", 
-            QString("No matching fingerprint found!\n\nScore: %1%").arg(score));
+        m_verifyScoreLabel->setText(QString("Best Score: %1%").arg(score));
+        m_verifyResultLabel->setText("✗ NOT IDENTIFIED");
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: #c62828; padding: 10px; font-weight: bold; font-size: 14px; }");
     }
     
     m_btnIdentify->setEnabled(true);

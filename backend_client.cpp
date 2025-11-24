@@ -451,8 +451,13 @@ void BackendClient::handleTemplateLoaded(QNetworkReply* reply)
         return;
     }
 
+    // Extract userId from URL path: /users/{userId}/fingerprint
+    QString path = reply->url().path();
+    int userId = path.section('/', -2, -2).toInt();
+    qDebug() << "BackendClient: Extracted userId from URL path:" << path << "-> userId:" << userId;
+
     BackendFingerprintTemplate tmpl;
-    tmpl.userId = obj["user_id"].toInt();
+    tmpl.userId = userId; // Get from URL, not from JSON (backend doesn't return user_id in response)
     tmpl.finger = obj["finger"].toString();
     QString base64Template = obj["template"].toString();
     tmpl.templateData = QByteArray::fromBase64(base64Template.toUtf8());
@@ -464,8 +469,9 @@ void BackendClient::handleTemplateLoaded(QNetworkReply* reply)
         return;
     }
 
+    qDebug() << "BackendClient: Template loaded successfully - userId:" << tmpl.userId << "finger:" << tmpl.finger << "data size:" << tmpl.templateData.size() << "bytes";
     emit templateLoaded(tmpl);
-    qDebug() << "BackendClient: Template loaded for user" << tmpl.userId << "finger" << tmpl.finger;
+    qDebug() << "BackendClient: templateLoaded signal emitted";
 }
 
 void BackendClient::handleTemplatesLoaded(QNetworkReply* reply)
