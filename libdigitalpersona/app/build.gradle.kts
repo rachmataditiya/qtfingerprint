@@ -10,6 +10,9 @@ android {
     defaultConfig {
         minSdk = 29
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters += listOf("arm64-v8a") // Only build for arm64-v8a (libfprint built for this arch)
+        }
     }
 
     buildTypes {

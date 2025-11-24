@@ -65,15 +65,17 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
         android
         log
         ${jnigraphics-lib}
-        # libfprint and dependencies
-        fprint-2
-        glib-2.0
-        gobject-2.0
-        gio-2.0
-        gusb
-        usb-1.0
-        pixman-1
-        ffi
+        # libfprint and dependencies (using full paths)
+        ${ANDROID_NDK_PREFIX}/lib/libfprint-2.so
+        ${ANDROID_NDK_PREFIX}/lib/libglib-2.0.so
+        ${ANDROID_NDK_PREFIX}/lib/libgobject-2.0.so
+        ${ANDROID_NDK_PREFIX}/lib/libgio-2.0.so
+        ${ANDROID_NDK_PREFIX}/lib/libgusb.so
+        ${ANDROID_NDK_PREFIX}/lib/libusb-1.0.so
+        ${ANDROID_NDK_PREFIX}/lib/libjson-glib-1.0.so
+        ${ANDROID_NDK_PREFIX}/lib/libffi.so
+        ${ANDROID_NDK_PREFIX}/lib/libssl.so
+        ${ANDROID_NDK_PREFIX}/lib/libcrypto.so
         dl
         m)
 

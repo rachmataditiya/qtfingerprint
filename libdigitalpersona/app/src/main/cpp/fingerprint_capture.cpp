@@ -174,57 +174,39 @@ bool FingerprintCapture::captureTemplate(std::vector<uint8_t>& templateData)
     GError* error = nullptr;
     FpImage* image = fp_device_capture_sync(m_device, TRUE, nullptr, &error);
     
-    if (!image) {
-        std::string errorMsg = "Failed to capture fingerprint image";
-        if (error) {
-            errorMsg += ": ";
-            errorMsg += error->message;
-            g_error_free(error);
-        }
+    if (error) {
+        std::string errorMsg = "Failed to capture fingerprint image: ";
+        errorMsg += error->message;
         setError(errorMsg);
+        g_error_free(error);
+        return false;
+    }
+    
+    if (!image) {
+        setError("Failed to capture fingerprint image - no image returned");
         return false;
     }
     
     LOGI("Fingerprint image captured successfully");
-    
-    // Create print from image
-    FpPrint* print = fp_print_new(m_device);
-    if (!print) {
-        setError("Failed to create print object");
-        g_object_unref(image);
-        return false;
-    }
-    
-    // Set print properties (optional, but recommended)
-    fp_print_set_finger(print, FP_FINGER_ANY);
-    
-    // Create print data from image
-    // Note: fp_print_data_from_image is an internal API, we need to use enrollment or verify
-    // For now, we'll serialize the image data directly
-    // In a real implementation, we'd use fp_device_enroll_sync or create print data properly
     
     // Get image data
     gsize dataLen = 0;
     const guchar* imageData = fp_image_get_data(image, &dataLen);
     
     if (!imageData || dataLen == 0) {
-        setError("Image data is empty");
-        g_object_unref(print);
+        std::string errorMsg = "Image data is empty";
+        setError(errorMsg);
         g_object_unref(image);
         return false;
     }
     
-    // For now, serialize the print object (this creates a template)
-    // Note: This requires the print to have been enrolled or created properly
-    // We'll use a simpler approach: store image data as template
-    // In production, use fp_print_data_serialize or proper enrollment flow
-    
-    // Copy image data to template
+    // Copy image data to template (raw image format)
+    // Note: For enrollment, this raw image will be used by Qt app to create FP3 template
+    // For verification/identification, we use FP3 templates from database
     templateData.resize(dataLen);
     memcpy(templateData.data(), imageData, dataLen);
     
     // Cleanup
-    g_object_unref(print);
     g_object_unref(image);
     
     LOGI("Template created successfully, size: %zu bytes", templateData.size());

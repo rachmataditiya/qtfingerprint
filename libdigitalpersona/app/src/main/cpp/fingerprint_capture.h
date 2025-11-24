@@ -5,6 +5,12 @@
 #include <string>
 #include <map>
 
+// Forward declarations for libfprint types (using actual typedef names)
+extern "C" {
+    typedef struct _FpContext FpContext;
+    typedef struct _FpDevice FpDevice;
+}
+
 /**
  * @brief C++ wrapper for libfprint fingerprint capture (Android version)
  * 
@@ -75,10 +81,6 @@ public:
     std::string getLastError() const { return m_lastError; }
     
 private:
-    // Forward declarations to avoid including libfprint headers in header file
-    struct FpContext;
-    struct FpDevice;
-    
     FpContext* m_context;
     FpDevice* m_device;
     std::string m_lastError;
