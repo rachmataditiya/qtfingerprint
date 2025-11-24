@@ -97,14 +97,31 @@ void BackendClient::getUserFingers(int userId)
     QUrl url(m_baseUrl + QString("/users/%1/fingers").arg(userId));
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Accept", "application/json");
+    request.setTransferTimeout(10000); // 10 second timeout
 
     QNetworkReply* reply = m_networkManager->get(request);
     m_requestTypes[reply] = "getUserFingers";
     qDebug() << "BackendClient: Getting fingers for user" << userId << "from URL:" << url.toString();
+    qDebug() << "BackendClient: Request sent, waiting for response...";
     
-    // Connect error signal for debugging
-    connect(reply, &QNetworkReply::errorOccurred, this, [this, userId, url](QNetworkReply::NetworkError error) {
+    // Connect signals for debugging
+    connect(reply, &QNetworkReply::errorOccurred, this, [this, userId, url, reply](QNetworkReply::NetworkError error) {
         qDebug() << "BackendClient: Network error getting fingers for user" << userId << ":" << error << "URL:" << url.toString();
+        qDebug() << "BackendClient: Error string:" << reply->errorString();
+        qDebug() << "BackendClient: HTTP status:" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    });
+    
+    connect(reply, &QNetworkReply::finished, this, [this, reply, userId]() {
+        qDebug() << "BackendClient: Reply finished for getUserFingers, user" << userId;
+        qDebug() << "BackendClient: Reply error:" << reply->error();
+        qDebug() << "BackendClient: Reply error string:" << reply->errorString();
+        qDebug() << "BackendClient: HTTP status:" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        qDebug() << "BackendClient: Bytes available:" << reply->bytesAvailable();
+    });
+    
+    connect(reply, &QNetworkReply::readyRead, this, [this, reply]() {
+        qDebug() << "BackendClient: Data ready to read, bytes available:" << reply->bytesAvailable();
     });
 }
 
@@ -194,28 +211,44 @@ void BackendClient::logAuth(int userId, bool success, float score)
 
 void BackendClient::onReplyFinished(QNetworkReply* reply)
 {
+    qDebug() << "BackendClient: onReplyFinished called";
+    qDebug() << "BackendClient: Reply URL:" << reply->url().toString();
+    qDebug() << "BackendClient: Reply error:" << reply->error();
+    qDebug() << "BackendClient: Reply error string:" << reply->errorString();
+    qDebug() << "BackendClient: HTTP status:" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    
     if (!m_requestTypes.contains(reply)) {
+        qDebug() << "BackendClient: WARNING - Reply not found in requestTypes map!";
         reply->deleteLater();
         return;
     }
 
     QString requestType = m_requestTypes.take(reply);
+    qDebug() << "BackendClient: Request type:" << requestType;
+
+    // For getUserFingers, handle even if there's an error (to emit empty list)
+    if (requestType == "getUserFingers") {
+        qDebug() << "BackendClient: Routing to handleUserFingersRetrieved";
+        handleUserFingersRetrieved(reply);
+        reply->deleteLater();
+        return;
+    }
 
     if (reply->error() != QNetworkReply::NoError) {
+        qDebug() << "BackendClient: Reply has error, calling handleError";
         handleError(reply, requestType);
         reply->deleteLater();
         return;
     }
 
     // Route to appropriate handler - handlers will read data themselves
+    qDebug() << "BackendClient: Routing to handler for" << requestType;
     if (requestType == "createUser") {
         handleUserCreated(reply);
     } else if (requestType == "listUsers") {
         handleUsersListed(reply);
     } else if (requestType == "getUser") {
         handleUserRetrieved(reply);
-    } else if (requestType == "getUserFingers") {
-        handleUserFingersRetrieved(reply);
     } else if (requestType == "storeTemplate") {
         handleTemplateStored(reply);
     } else if (requestType == "loadTemplate") {
