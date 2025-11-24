@@ -6,6 +6,7 @@ import com.arkana.fingerprint.sdk.model.*
 import com.arkana.fingerprint.sdk.capture.CaptureManager
 import com.arkana.fingerprint.sdk.matching.MatchingEngine
 import com.arkana.fingerprint.sdk.backend.BackendClient
+import com.arkana.fingerprint.sdk.backend.BackendResult
 import com.arkana.fingerprint.sdk.cache.SecureCache
 import com.arkana.fingerprint.sdk.util.FingerError
 import kotlinx.coroutines.Dispatchers
@@ -102,8 +103,8 @@ object FingerprintSdk {
 
                 // Store in backend
                 val storeResult = backendClient.storeTemplate(userId, template, finger)
-                if (storeResult is BackendResult.Error) {
-                    return@withContext EnrollResult.Error(storeResult.error)
+                if (storeResult !is BackendResult.Success) {
+                    return@withContext EnrollResult.Error(FingerError.BACKEND_ERROR)
                 }
 
                 // Cache locally (encrypted)
@@ -132,13 +133,13 @@ object FingerprintSdk {
                         // Load from backend if not in cache
                         val backendResult = backendClient.loadTemplate(userId)
                         when (backendResult) {
-                            is BackendResult.Success -> {
+                            is BackendResult.Template -> {
                                 backendResult.template.also {
                                     secureCache.store(userId, it)
                                 }
                             }
-                            is BackendResult.Error -> {
-                                return@withContext VerifyResult.Error(backendResult.error)
+                            else -> {
+                                return@withContext VerifyResult.Error(FingerError.TEMPLATE_NOT_FOUND)
                             }
                         }
                     }
@@ -182,9 +183,11 @@ object FingerprintSdk {
                 // Load templates (from backend)
                 val templatesResult = backendClient.loadTemplates(scope)
                 val templates = when (templatesResult) {
-                    is BackendResult.Success -> templatesResult.templates
-                    is BackendResult.Error -> {
-                        return@withContext IdentifyResult.Error(templatesResult.error)
+                    is BackendResult.Templates -> {
+                        templatesResult.templates
+                    }
+                    else -> {
+                        return@withContext IdentifyResult.Error(FingerError.BACKEND_ERROR)
                     }
                 }
 

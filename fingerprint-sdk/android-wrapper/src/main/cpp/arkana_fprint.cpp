@@ -102,28 +102,23 @@ Java_com_arkana_fingerprint_sdk_capture_native_LibfprintNative_match(
         return 0.0f;
     }
 
-    // Get template data
-    jsize len1 = env->GetArrayLength(template1);
+    // Get stored template (template2 is the stored template from database)
     jsize len2 = env->GetArrayLength(template2);
-    
-    jbyte* data1 = env->GetByteArrayElements(template1, nullptr);
     jbyte* data2 = env->GetByteArrayElements(template2, nullptr);
 
-    std::vector<uint8_t> t1(reinterpret_cast<uint8_t*>(data1), 
-                           reinterpret_cast<uint8_t*>(data1) + len1);
-    std::vector<uint8_t> t2(reinterpret_cast<uint8_t*>(data2), 
-                           reinterpret_cast<uint8_t*>(data2) + len2);
+    std::vector<uint8_t> storedTemplate(reinterpret_cast<uint8_t*>(data2), 
+                                        reinterpret_cast<uint8_t*>(data2) + len2);
 
     // Match using libfprint
+    // matchWithTemplate will capture current fingerprint and match with stored template
+    // Signature: matchWithTemplate(storedTemplate, matched, score)
     bool matched = false;
     int score = 0;
-    if (!g_capture->matchWithTemplate(t1, t2, matched, score)) {
-        env->ReleaseByteArrayElements(template1, data1, JNI_ABORT);
+    if (!g_capture->matchWithTemplate(storedTemplate, matched, score)) {
         env->ReleaseByteArrayElements(template2, data2, JNI_ABORT);
         return 0.0f;
     }
 
-    env->ReleaseByteArrayElements(template1, data1, JNI_ABORT);
     env->ReleaseByteArrayElements(template2, data2, JNI_ABORT);
 
     // Convert score (0-100) to float (0.0-1.0)

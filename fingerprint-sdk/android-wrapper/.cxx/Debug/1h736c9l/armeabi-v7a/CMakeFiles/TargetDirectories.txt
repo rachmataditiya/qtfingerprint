@@ -1,0 +1,3 @@
+/Users/rachmataditiya/Projects/uareu/fingerprint-sdk/android-wrapper/.cxx/Debug/1h736c9l/armeabi-v7a/CMakeFiles/arkana_fprint.dir
+/Users/rachmataditiya/Projects/uareu/fingerprint-sdk/android-wrapper/.cxx/Debug/1h736c9l/armeabi-v7a/CMakeFiles/edit_cache.dir
+/Users/rachmataditiya/Projects/uareu/fingerprint-sdk/android-wrapper/.cxx/Debug/1h736c9l/armeabi-v7a/CMakeFiles/rebuild_cache.dir

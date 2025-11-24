@@ -70,7 +70,7 @@ class BackendClient(private val baseUrl: String) {
                 val json = JSONObject(body)
                 val templateBase64 = json.getString("template")
                 val template = Base64.getDecoder().decode(templateBase64)
-                BackendResult.Success(template)
+                BackendResult.Template(template)
             } else {
                 BackendResult.Error(FingerError.TEMPLATE_NOT_FOUND)
             }
@@ -109,7 +109,7 @@ class BackendClient(private val baseUrl: String) {
                     templates[userId] = template
                 }
                 
-                BackendResult.Success(templates)
+                BackendResult.Templates(templates)
             } else {
                 BackendResult.Error(FingerError.BACKEND_ERROR)
             }
@@ -148,8 +148,7 @@ class BackendClient(private val baseUrl: String) {
  */
 sealed class BackendResult {
     object Success : BackendResult()
-    data class Success(val template: ByteArray) : BackendResult()
-    data class Success(val templates: Map<Int, ByteArray>) : BackendResult()
+    data class Template(val template: ByteArray) : BackendResult()
+    data class Templates(val templates: Map<Int, ByteArray>) : BackendResult()
     data class Error(val error: FingerError) : BackendResult()
 }
-
