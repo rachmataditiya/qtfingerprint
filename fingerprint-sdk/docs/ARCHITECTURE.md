@@ -1,241 +1,146 @@
-# SDK Architecture
+# Arkana Fingerprint SDK - Architecture
 
-## Overview
+## System Architecture
 
-The Fingerprint SDK is designed with a clean layered architecture that abstracts all the complexity of USB communication and libfprint integration. The SDK runs entirely on the Android device and communicates with a separate backend API for template storage.
+```
+App Android
+   │ Kotlin API
+   ▼
+Arkana Fingerprint SDK
+   ├─ Capture Layer (JNI ↔ libfprint)
+   ├─ Matching Engine (local)
+   ├─ Backend API (Rust)
+   └─ Secure Cache (AES + Keystore)
+```
 
-## Architecture Decision
+## Module Structure
 
-**Important**: 
-- **SDK**: Runs on Android device, handles USB hardware and fingerprint operations
-- **Backend API**: Separate service (Rust Axum) for template storage and user management
-- **No Rust in SDK**: SDK uses only Kotlin/Java and C++
+```
+com.arkana.fingerprint.sdk/
+  ├── FingerprintSdk.kt          # Main API
+  ├── config/                     # Configuration
+  │   └── FingerprintSdkConfig.kt
+  ├── capture/                    # Capture operations
+  │   ├── CaptureManager.kt
+  │   └── native/
+  │       └── LibfprintNative.kt  # JNI bridge
+  ├── matching/                   # Matching engine
+  │   └── MatchingEngine.kt
+  ├── backend/                    # Backend API client
+  │   └── BackendClient.kt
+  ├── cache/                      # Secure cache
+  │   └── SecureCache.kt
+  ├── model/                      # Data models
+  │   ├── Finger.kt
+  │   ├── CaptureResult.kt
+  │   ├── EnrollResult.kt
+  │   ├── VerifyResult.kt
+  │   └── IdentifyResult.kt
+  └── util/                       # Utilities
+      └── FingerError.kt
+```
 
 ## Layer Breakdown
 
-### 1. Android Application Layer (Kotlin/Java)
+### 1. Kotlin API Layer
 
-**Responsibility**: Application logic and UI
+**FingerprintSdk.kt** - Main entry point:
+- `init(config, context)` - Initialize SDK
+- `enroll(userId, finger)` - Enroll fingerprint
+- `verify(userId)` - Verify 1:1
+- `identify(scope)` - Identify 1:N
 
-**What it does**:
-- Calls SDK methods
-- Handles UI updates
-- Manages application state
+### 2. Capture Layer
 
-**What it doesn't know**:
-- USB device details
-- libfprint internals
-- Template format
-- Backend API details
+**CaptureManager.kt**:
+- USB device management
+- Fingerprint capture coordination
 
-### 2. Android Wrapper Layer (Kotlin/Java)
+**LibfprintNative.kt** (JNI bridge):
+- Calls native `arkana_fprint.cpp`
+- Type conversion Java ↔ C++
 
-**Location**: `android-wrapper/`
-
-**Responsibility**: 
-- USB permission management
-- SDK lifecycle
-- Error translation
-- Thread management
-- HTTP client for backend API (template storage)
-
-**Key Classes**:
-- `FingerprintSDK`: Main SDK class
-- `FingerprintSDK.Callback`: Result callbacks
-- `FingerprintSDK.Config`: Configuration
-
-### 3. JNI Bridge Layer (C/C++)
-
-**Location**: `jni-bridge/`
-
-**Responsibility**:
-- Type conversion (Java ↔ C/C++)
-- Error propagation
-- Memory management
-- Thread safety
-
-**Key Functions**:
-- `Java_com_arkana_fingerprintsdk_FingerprintSDK_nativeEnroll`
-- `Java_com_arkana_fingerprintsdk_FingerprintSDK_nativeVerify`
-- `Java_com_arkana_fingerprintsdk_FingerprintSDK_nativeIdentify`
-
-### 4. C++ Fingerprint Layer
-
-**Location**: Uses existing `FingerprintCapture` from `libdigitalpersona/`
-
-**Responsibility**:
+**arkana_fprint.cpp** (Native):
+- Uses existing `FingerprintCapture` from `libdigitalpersona/`
 - Direct libfprint integration
-- USB device communication
-- Fingerprint capture
-- Matching algorithms
 
-**Key Classes**:
-- `FingerprintCapture`: Core fingerprint operations
-- `FingerprintManagerAndroid`: JNI bridge wrapper
+### 3. Matching Engine
 
-### 5. Native Libraries Layer
+**MatchingEngine.kt**:
+- Template matching using libfprint
+- Score calculation (0.0-1.0)
 
-**Location**: Uses libraries from `uareu-android-libs`
+### 4. Backend Client
 
-**Responsibility**:
-- USB device communication
-- Fingerprint capture
-- Matching algorithms
+**BackendClient.kt**:
+- HTTP client for Rust Axum API
+- Template storage/retrieval
+- Authentication logging
 
-**Libraries**:
-- libfprint
-- libgusb
-- libusb
-- GLib, json-glib, etc.
+### 5. Secure Cache
+
+**SecureCache.kt**:
+- AES-256-GCM encryption
+- Android Keystore key management
+- Binary encrypted format
 
 ## Data Flow
 
 ### Enrollment Flow
 
 ```
-Android App
-  ↓ enrollFingerprint(userId)
-Android Wrapper (Kotlin)
-  ↓ Request USB permission
-  ↓ Initialize device
-JNI Bridge (C/C++)
-  ↓ Convert parameters (jint → int)
-  ↓ Call C++ FingerprintCapture
-C++ Layer
-  ↓ Capture fingerprint (5 scans)
-  ↓ Create template
-  ↓ Return template data
-JNI Bridge (C/C++)
-  ↓ Convert result (byte[] → jbyteArray)
-Android Wrapper (Kotlin)
-  ↓ HTTP POST to backend API
-  ↓ Store template in database (via backend)
-  ↓ Call callback on main thread
-Android App
-  ↓ onEnrollSuccess(userId)
+FingerprintSdk.enroll()
+  ↓
+CaptureManager.captureOnce() × 5
+  ↓
+LibfprintNative.capture()
+  ↓
+arkana_fprint.cpp → FingerprintCapture
+  ↓
+libfprint → USB device
+  ↓
+MatchingEngine.createTemplate()
+  ↓
+BackendClient.storeTemplate()
+  ↓
+SecureCache.store() (encrypted)
 ```
 
 ### Verification Flow
 
 ```
-Android App
-  ↓ verifyFingerprint(userId)
-Android Wrapper (Kotlin)
-  ↓ Check device ready
-  ↓ HTTP GET to backend API
-  ↓ Load template from database (via backend)
-JNI Bridge (C/C++)
-  ↓ Convert template (jbyteArray → byte[])
-  ↓ Call C++ FingerprintCapture
-C++ Layer
-  ↓ Capture fingerprint
-  ↓ Match with template
-  ↓ Return score
-JNI Bridge (C/C++)
-  ↓ Convert result (int → jint)
-Android Wrapper (Kotlin)
-  ↓ Call callback on main thread
-Android App
-  ↓ onVerifySuccess(userId, score)
+FingerprintSdk.verify()
+  ↓
+SecureCache.load() or BackendClient.loadTemplate()
+  ↓
+CaptureManager.captureOnce()
+  ↓
+MatchingEngine.match()
+  ↓
+BackendClient.logAuth()
 ```
 
-### Identification Flow
+## Native Libraries
 
-```
-Android App
-  ↓ identifyFingerprint()
-Android Wrapper (Kotlin)
-  ↓ Check device ready
-  ↓ HTTP GET to backend API
-  ↓ Load all templates from database (via backend)
-  ↓ Create gallery
-JNI Bridge (C/C++)
-  ↓ Convert templates (jbyteArray[] → vector<byte[]>)
-  ↓ Call C++ FingerprintCapture
-C++ Layer
-  ↓ Capture fingerprint
-  ↓ Match against gallery
-  ↓ Return matched user
-JNI Bridge (C/C++)
-  ↓ Convert result (int → jint)
-Android Wrapper (Kotlin)
-  ↓ Call callback on main thread
-Android App
-  ↓ onIdentifySuccess(userId, score)
-```
-
-## Communication with Backend
-
-**Backend API** (Rust Axum server) is a **separate service** running on a server:
-
-```
-Android Wrapper (Kotlin)
-  ↓ HTTP Client (OkHttp/Retrofit)
-  ↓ HTTP POST/GET requests
-Backend API (Rust Axum on server)
-  ↓ Database operations
-  ↓ Template storage/retrieval
-Database (PostgreSQL/SQLite)
-```
-
-**Backend is NOT part of the SDK**. It's a separate service that:
-- Stores fingerprint templates
-- Manages user data
-- Provides REST API endpoints
-
-The SDK only needs to:
-- Make HTTP requests to backend API
-- Send/receive templates (Base64 encoded)
-- Handle network errors
-
-## Error Handling
-
-Errors flow through all layers with proper translation:
-
-1. **Native Layer (libfprint)**: Returns error codes and messages
-2. **C++ Layer**: Wraps in exceptions or error codes
-3. **JNI Bridge**: Converts to Java exceptions or error codes
-4. **Android Wrapper**: Translates to user-friendly messages
-5. **Application**: Receives clear error via callback
+SDK includes:
+- `libarkana_fprint.so` - Native JNI bridge
+- `libfprint-2.so` - Fingerprint library
+- `libgusb.so`, `libusb-1.0.so` - USB communication
+- `libglib-2.0.so`, `libgobject-2.0.so`, `libgio-2.0.so` - GLib
+- `libjson-glib-1.0.so` - JSON parsing
+- `libffi.so` - Foreign function interface
+- `libcrypto.so`, `libssl.so` - OpenSSL
 
 ## Threading Model
 
-- **Main Thread**: UI updates only
-- **Background Thread**: All SDK operations (executor in Android wrapper)
-- **USB Thread**: Dedicated thread for USB operations (in C++ layer)
-- **Network Thread**: HTTP requests (OkHttp handles this)
+- **Main Thread**: UI updates
+- **IO Dispatcher**: Capture, backend API calls
+- **Default Dispatcher**: Matching operations
 
-## Memory Management
+## Security
 
-- **Java/Kotlin**: Automatic garbage collection
-- **JNI**: Manual memory management, careful with global refs
-- **C++**: Manual memory management (smart pointers where possible)
-- **Native (libfprint)**: GLib reference counting
+- Templates encrypted with AES-256-GCM
+- Keys stored in Android Keystore
+- No plaintext templates
+- HTTPS recommended for backend
 
-## Build Process
-
-1. **C++ Layer**: Compile to `libfingerprint-capture.so` (uses existing code)
-2. **JNI Bridge**: Compile to `libfingerprint-sdk-native.so` (links C++)
-3. **Android Wrapper**: Package as AAR with all `.so` files
-
-## Configuration
-
-SDK can be configured via `FingerprintSDK.Config`:
-
-```kotlin
-val config = FingerprintSDK.Config(
-    backendUrl = "http://api.example.com",  // Backend API URL
-    enrollmentScans = 5,
-    matchThreshold = 60,
-    timeoutSeconds = 30
-)
-FingerprintSDK.initialize(this, config)
-```
-
-## Security Considerations
-
-- Templates stored encrypted in database (backend responsibility)
-- USB communication secured
-- No sensitive data in logs
-- Proper permission handling
-- HTTPS for backend communication (recommended)

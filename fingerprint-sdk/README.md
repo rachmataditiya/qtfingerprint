@@ -1,138 +1,116 @@
-# Fingerprint SDK for Android
+# Arkana Fingerprint SDK
 
-A clean, high-level SDK for fingerprint operations on Android devices using DigitalPersona U.are.U 4000.
+SDK untuk operasi fingerprint pada Android menggunakan DigitalPersona U.are.U 4000.
 
 ## Overview
 
-This SDK provides a simple, clean API for Android applications to perform fingerprint operations without needing to understand the underlying complexity of libfprint, libusb, or USB Host API integration.
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│           Android Application (Kotlin/Java)            │
-│  enrollFingerprint(userId)                             │
-│  verifyFingerprint(userId)                             │
-│  identifyFingerprint()                                 │
-└───────────────────┬─────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────────┐
-│         Android Wrapper (Kotlin/Java)                  │
-│  FingerprintSDK class                                   │
-│  - Manages USB permissions                              │
-│  - Handles lifecycle                                    │
-│  - Provides clean API                                   │
-└───────────────────┬─────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────────┐
-│              JNI Layer (C/C++)                          │
-│  Native methods bridge                                  │
-│  - Error handling                                       │
-│  - Type conversion                                      │
-└───────────────────┬─────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────────┐
-│            Rust Service Layer                           │
-│  - Fingerprint operations                               │
-│  - Template management                                  │
-│  - Database integration                                 │
-└───────────────────┬─────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────────┐
-│         libfprint + Android Libraries                   │
-│  - USB device communication                             │
-│  - Fingerprint capture                                  │
-│  - Matching algorithms                                  │
-└─────────────────────────────────────────────────────────┘
-```
+SDK ini menyediakan API yang clean dan simple untuk:
+- **Capture**: Menangkap fingerprint dari hardware
+- **Enroll**: Mendaftarkan fingerprint untuk user
+- **Verify**: Verifikasi 1:1 (satu user, satu template)
+- **Identify**: Identifikasi 1:N (cari user dari banyak template)
 
 ## Features
 
-✅ **Simple API** - Just 3 methods: enroll, verify, identify  
-✅ **Automatic USB Management** - Handles permissions and device initialization  
-✅ **Error Handling** - Clear error messages and status codes  
-✅ **Thread-Safe** - Safe to call from any thread  
-✅ **Lifecycle Aware** - Properly manages resources  
-✅ **Well Documented** - Complete API reference and examples  
+✅ **Simple API** - Hanya 3 method utama: enroll, verify, identify  
+✅ **Automatic USB Management** - Handles permissions dan device initialization  
+✅ **Secure Cache** - Template di-cache dengan AES-256-GCM + Android Keystore  
+✅ **Backend Integration** - Komunikasi dengan Rust API untuk template storage  
+✅ **Local Matching** - Matching dilakukan di device menggunakan libfprint  
+✅ **Coroutine Support** - Menggunakan Kotlin Coroutines untuk async operations  
+✅ **Error Handling** - Error handling yang comprehensive dengan `FingerError` enum  
 
 ## Quick Start
 
-### 1. Add Dependency
-
-```gradle
-dependencies {
-    implementation 'com.arkana:fingerprint-sdk:1.0.0'
-}
-```
-
-### 2. Initialize SDK
+### 1. Initialize SDK
 
 ```kotlin
-import com.arkana.fingerprintsdk.FingerprintSDK
+import com.arkana.fingerprint.sdk.FingerprintSdk
 
-class MainActivity : AppCompatActivity() {
-    private lateinit var fingerprintSDK: FingerprintSDK
-    
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        
-        // Initialize SDK
-        fingerprintSDK = FingerprintSDK.initialize(this)
-        
-        // Set callback for results
-        fingerprintSDK.setCallback(object : FingerprintSDK.Callback {
-            override fun onEnrollSuccess(userId: Int) {
-                Log.d(TAG, "Enrollment successful for user $userId")
-            }
-            
-            override fun onEnrollError(userId: Int, error: String) {
-                Log.e(TAG, "Enrollment failed: $error")
-            }
-            
-            override fun onVerifySuccess(userId: Int, score: Int) {
-                Log.d(TAG, "Verification successful: score=$score")
-            }
-            
-            override fun onVerifyError(userId: Int, error: String) {
-                Log.e(TAG, "Verification failed: $error")
-            }
-            
-            override fun onIdentifySuccess(userId: Int, score: Int) {
-                Log.d(TAG, "User identified: userId=$userId, score=$score")
-            }
-            
-            override fun onIdentifyError(error: String) {
-                Log.e(TAG, "Identification failed: $error")
-            }
-        })
+val config = FingerprintSdkConfig(
+    backendUrl = "http://api.example.com",
+    enrollmentScans = 5,
+    matchThreshold = 0.6f,
+    enableCache = true
+)
+
+FingerprintSdk.init(config, context)
+```
+
+### 2. Enroll Fingerprint
+
+```kotlin
+val result = FingerprintSdk.enroll(
+    userId = 123,
+    finger = Finger.LEFT_INDEX
+)
+
+when (result) {
+    is EnrollResult.Success -> {
+        println("Enrollment successful")
+    }
+    is EnrollResult.Error -> {
+        println("Error: ${result.error}")
     }
 }
 ```
 
-### 3. Use SDK
+### 3. Verify Fingerprint
 
 ```kotlin
-// Enroll fingerprint for user
-fingerprintSDK.enrollFingerprint(userId = 123)
+val result = FingerprintSdk.verify(userId = 123)
 
-// Verify fingerprint
-fingerprintSDK.verifyFingerprint(userId = 123)
-
-// Identify user (1:N matching)
-fingerprintSDK.identifyFingerprint()
+when (result) {
+    is VerifyResult.Success -> {
+        println("Verified! Score: ${result.score}")
+    }
+    is VerifyResult.Error -> {
+        println("Error: ${result.error}")
+    }
+}
 ```
 
-## API Reference
+### 4. Identify User
 
-See [API_REFERENCE.md](docs/API_REFERENCE.md) for complete API documentation.
+```kotlin
+val result = FingerprintSdk.identify(scope = "branch_001")
 
-## Examples
+when (result) {
+    is IdentifyResult.Success -> {
+        println("User identified: ${result.userId}, Score: ${result.score}")
+    }
+    is IdentifyResult.Error -> {
+        println("Error: ${result.error}")
+    }
+}
+```
 
-See [examples/](examples/) directory for complete working examples.
+## Architecture
+
+```
+App Android
+   │ Kotlin API
+   ▼
+Arkana Fingerprint SDK
+   ├─ Capture Layer (JNI ↔ libfprint)
+   ├─ Matching Engine (local)
+   ├─ Backend API (Rust)
+   └─ Secure Cache (AES + Keystore)
+```
+
+## Module Structure
+
+```
+com.arkana.fingerprint.sdk/
+  ├── FingerprintSdk.kt          # Main API
+  ├── config/                     # Configuration
+  ├── capture/                    # Capture operations
+  ├── matching/                   # Matching engine
+  ├── backend/                    # Backend API client
+  ├── cache/                      # Secure cache
+  ├── model/                      # Data models
+  └── util/                       # Utilities
+```
 
 ## Requirements
 
@@ -141,7 +119,20 @@ See [examples/](examples/) directory for complete working examples.
 - DigitalPersona U.are.U 4000 fingerprint reader
 - Backend API running (for template storage)
 
+## Dependencies
+
+- libfprint (from `uareu-android-libs`)
+- libgusb, libusb
+- GLib, json-glib, libffi, OpenSSL
+
+## Documentation
+
+- [API Reference](docs/API_REFERENCE.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Build Instructions](docs/BUILD.md)
+- [Examples](examples/)
+
 ## License
 
-See [LICENSE.md](LICENSE.md) for license information.
+Proprietary - Arkana
 

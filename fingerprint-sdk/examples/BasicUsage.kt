@@ -1,95 +1,88 @@
-package com.arkana.fingerprintsdk.examples
+package com.arkana.fingerprint.sdk.examples
 
 import android.os.Bundle
-import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
-import com.arkana.fingerprintsdk.FingerprintSDK
+import com.arkana.fingerprint.sdk.FingerprintSdk
+import com.arkana.fingerprint.sdk.config.FingerprintSdkConfig
+import com.arkana.fingerprint.sdk.model.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
- * Basic usage example of Fingerprint SDK.
+ * Basic usage example of Arkana Fingerprint SDK.
  */
 class BasicUsageActivity : AppCompatActivity() {
-    private lateinit var sdk: FingerprintSDK
-    
+    private val scope = CoroutineScope(Dispatchers.Main)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Initialize SDK with default config
-        sdk = FingerprintSDK.initialize(this)
-        
-        // Or with custom config
-        val config = FingerprintSDK.Config(
+
+        // Initialize SDK
+        val config = FingerprintSdkConfig(
             backendUrl = "http://api.example.com",
             enrollmentScans = 5,
-            matchThreshold = 60
+            matchThreshold = 0.6f,
+            enableCache = true
         )
-        // sdk = FingerprintSDK.initialize(this, config)
-        
-        // Set callback
-        sdk.setCallback(object : FingerprintSDK.Callback {
-            override fun onEnrollSuccess(userId: Int) {
-                Log.d(TAG, "Enrollment successful for user $userId")
-                // Update UI
-            }
-            
-            override fun onEnrollError(userId: Int, error: String) {
-                Log.e(TAG, "Enrollment failed for user $userId: $error")
-                // Show error to user
-            }
-            
-            override fun onVerifySuccess(userId: Int, score: Int) {
-                Log.d(TAG, "Verification successful for user $userId, score: $score")
-                // Update UI
-            }
-            
-            override fun onVerifyError(userId: Int, error: String) {
-                Log.e(TAG, "Verification failed for user $userId: $error")
-                // Show error to user
-            }
-            
-            override fun onIdentifySuccess(userId: Int, score: Int) {
-                Log.d(TAG, "User identified: $userId, score: $score")
-                // Update UI with identified user
-            }
-            
-            override fun onIdentifyError(error: String) {
-                Log.e(TAG, "Identification failed: $error")
-                // Show error to user
-            }
-        })
+        FingerprintSdk.init(config, this)
+
+        // Example: Enroll fingerprint
+        enrollExample()
+
+        // Example: Verify fingerprint
+        verifyExample()
+
+        // Example: Identify user
+        identifyExample()
     }
-    
-    private fun enrollUser(userId: Int) {
-        if (sdk.isReady()) {
-            sdk.enrollFingerprint(userId)
-        } else {
-            Log.w(TAG, "SDK not ready")
+
+    private fun enrollExample() {
+        scope.launch {
+            val result = FingerprintSdk.enroll(
+                userId = 123,
+                finger = Finger.LEFT_INDEX
+            )
+
+            when (result) {
+                is EnrollResult.Success -> {
+                    println("✅ Enrollment successful for user ${result.userId}")
+                }
+                is EnrollResult.Error -> {
+                    println("❌ Enrollment failed: ${result.error}")
+                }
+            }
         }
     }
-    
-    private fun verifyUser(userId: Int) {
-        if (sdk.isReady()) {
-            sdk.verifyFingerprint(userId)
-        } else {
-            Log.w(TAG, "SDK not ready")
+
+    private fun verifyExample() {
+        scope.launch {
+            val result = FingerprintSdk.verify(userId = 123)
+
+            when (result) {
+                is VerifyResult.Success -> {
+                    println("✅ Verified! User: ${result.userId}, Score: ${result.score}")
+                }
+                is VerifyResult.Error -> {
+                    println("❌ Verification failed: ${result.error}")
+                }
+            }
         }
     }
-    
-    private fun identifyUser() {
-        if (sdk.isReady()) {
-            sdk.identifyFingerprint()
-        } else {
-            Log.w(TAG, "SDK not ready")
+
+    private fun identifyExample() {
+        scope.launch {
+            val result = FingerprintSdk.identify(scope = "branch_001")
+
+            when (result) {
+                is IdentifyResult.Success -> {
+                    println("✅ User identified: ${result.userId}, Score: ${result.score}")
+                }
+                is IdentifyResult.Error -> {
+                    println("❌ Identification failed: ${result.error}")
+                }
+            }
         }
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        sdk.cleanup()
-    }
-    
-    companion object {
-        private const val TAG = "BasicUsageActivity"
     }
 }
 
