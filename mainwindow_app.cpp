@@ -812,6 +812,12 @@ void MainWindowApp::onTemplateStored(int userId, const QString& finger)
 
 void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
 {
+    // Check if this is for verification (userId matches)
+    if (tmpl.userId != m_verificationUserId) {
+        // Not for verification, ignore
+        return;
+    }
+    
     // Handle template loaded for verification
     log(QString("Template loaded for user %1, finger %2").arg(tmpl.userId).arg(tmpl.finger));
     
@@ -823,6 +829,8 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
         // Load next finger template
         QString nextFinger = m_remainingVerificationFingers.takeFirst();
         log(QString("Loading template for finger: %1").arg(nextFinger));
+        m_verifyResultLabel->setText(QString("Loading template %1/%2...").arg(m_verificationTemplates.size() + 1).arg(m_verificationTemplates.size() + m_remainingVerificationFingers.size() + 1));
+        QApplication::processEvents();
         m_backendClient->loadTemplate(m_verificationUserId, nextFinger);
         return; // Wait for next template to load
     }
@@ -972,6 +980,8 @@ void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>&
     if (templates.isEmpty()) {
         QMessageBox::warning(this, "No Templates", "No fingerprint templates found. Please enroll users first.");
         m_btnIdentify->setEnabled(true);
+        m_verifyResultLabel->setText("Result: No templates");
+        m_verifyScoreLabel->setText("Score: -");
         return;
     }
     
@@ -979,8 +989,15 @@ void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>&
     if (!m_fpManager->isReaderOpen()) {
         QMessageBox::critical(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
         m_btnIdentify->setEnabled(true);
+        m_verifyResultLabel->setText("Result: Device not ready");
+        m_verifyScoreLabel->setText("Score: -");
         return;
     }
+    
+    // Update UI for identification
+    m_verifyResultLabel->setText("Identifying...");
+    m_verifyScoreLabel->setText("Place finger on reader...");
+    QApplication::processEvents();
     
     // Prepare templates vector for identifyUser (like Android implementation)
     // IMPORTANT: Use ALL templates (all fingers) - this matches fingerprint-sdk implementation
