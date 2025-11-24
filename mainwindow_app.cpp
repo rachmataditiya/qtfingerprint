@@ -264,12 +264,6 @@ void MainWindowApp::setupUI()
     m_btnIdentify->setMinimumHeight(40);
     verifyButtonsLayout->addWidget(m_btnIdentify);
     
-    m_btnCaptureVerify = new QPushButton("Capture & Verify");
-    m_btnCaptureVerify->setStyleSheet("QPushButton { padding: 10px; font-size: 13px; background-color: #2196F3; color: white; font-weight: bold; } QPushButton:hover { background-color: #0b7dda; }");
-    m_btnCaptureVerify->setEnabled(false);
-    m_btnCaptureVerify->setMinimumHeight(40);
-    verifyButtonsLayout->addWidget(m_btnCaptureVerify);
-    
     verifyLayout->addLayout(verifyButtonsLayout);
     
     // Result display
