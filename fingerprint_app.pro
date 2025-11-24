@@ -1,4 +1,4 @@
-QT += core gui widgets sql concurrent
+QT += core gui widgets sql concurrent network
 
 CONFIG += c++17
 
@@ -133,14 +133,18 @@ SOURCES += \
     database_manager.cpp \
     database_config_dialog.cpp \
     migration_manager.cpp \
-    identification_dialog.cpp
+    identification_dialog.cpp \
+    backend_client.cpp \
+    backend_config_dialog.cpp
 
 HEADERS += \
     mainwindow_app.h \
     database_manager.h \
     database_config_dialog.h \
     migration_manager.h \
-    identification_dialog.h
+    identification_dialog.h \
+    backend_client.h \
+    backend_config_dialog.h
 
 RESOURCES += migrations.qrc
 
