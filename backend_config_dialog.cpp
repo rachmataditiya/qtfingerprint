@@ -8,6 +8,7 @@
 #include <QNetworkRequest>
 #include <QUrl>
 #include <QDebug>
+#include <QCoreApplication>
 
 BackendConfigDialog::BackendConfigDialog(QWidget *parent)
     : QDialog(parent)

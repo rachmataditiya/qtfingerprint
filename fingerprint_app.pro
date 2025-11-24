@@ -1,4 +1,4 @@
-QT += core gui widgets sql concurrent network
+QT += core gui widgets concurrent network
 
 CONFIG += c++17
 
@@ -43,7 +43,16 @@ macx {
                        install_name_tool -id @rpath/libdigitalpersona.1.dylib $$FRAMEWORKS_DIR/libdigitalpersona.1.dylib && \
                        cp -f $$PWD/libfprint_repo/builddir/libfprint/libfprint-2.2.dylib $$FRAMEWORKS_DIR/ && \
                        install_name_tool -id @rpath/libfprint-2.2.dylib $$FRAMEWORKS_DIR/libfprint-2.2.dylib && \
-                       install_name_tool -change libdigitalpersona.1.dylib @rpath/libdigitalpersona.1.dylib $$EXECUTABLE_PATH
+                       install_name_tool -change libdigitalpersona.1.dylib @rpath/libdigitalpersona.1.dylib $$EXECUTABLE_PATH && \
+                       /opt/homebrew/opt/qt/bin/macdeployqt $$APP_BUNDLE_DIR -verbose=0 && \
+                       install_name_tool -change /opt/homebrew/opt/qtbase/lib/QtWidgets.framework/Versions/A/QtWidgets @executable_path/../Frameworks/QtWidgets.framework/Versions/A/QtWidgets $$EXECUTABLE_PATH && \
+                       install_name_tool -change /opt/homebrew/opt/qtbase/lib/QtGui.framework/Versions/A/QtGui @executable_path/../Frameworks/QtGui.framework/Versions/A/QtGui $$EXECUTABLE_PATH && \
+                       install_name_tool -change /opt/homebrew/opt/qtbase/lib/QtCore.framework/Versions/A/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/A/QtCore $$EXECUTABLE_PATH && \
+                       install_name_tool -change /opt/homebrew/opt/qtbase/lib/QtNetwork.framework/Versions/A/QtNetwork @executable_path/../Frameworks/QtNetwork.framework/Versions/A/QtNetwork $$EXECUTABLE_PATH && \
+                       install_name_tool -change /opt/homebrew/opt/qtbase/lib/QtConcurrent.framework/Versions/A/QtConcurrent @executable_path/../Frameworks/QtConcurrent.framework/Versions/A/QtConcurrent $$EXECUTABLE_PATH && \
+                       find $$FRAMEWORKS_DIR -name "*.framework" -type d -exec codesign --force --sign - --entitlements $$PWD/entitlements.plist {}/Versions/A/* \; 2>&1 | grep -v "replacing existing signature" ; true && \
+                       codesign --force --sign - --entitlements $$PWD/entitlements.plist $$EXECUTABLE_PATH 2>&1 | grep -v "replacing existing signature" ; true && \
+                       codesign --force --sign - --entitlements $$PWD/entitlements.plist $$APP_BUNDLE_DIR 2>&1 | grep -v "replacing existing signature" ; true
 }
 
 # Libfprint Dependencies (Homebrew on macOS)
@@ -130,19 +139,11 @@ android {
 SOURCES += \
     main_app.cpp \
     mainwindow_app.cpp \
-    database_manager.cpp \
-    database_config_dialog.cpp \
-    migration_manager.cpp \
-    identification_dialog.cpp \
     backend_client.cpp \
     backend_config_dialog.cpp
 
 HEADERS += \
     mainwindow_app.h \
-    database_manager.h \
-    database_config_dialog.h \
-    migration_manager.h \
-    identification_dialog.h \
     backend_client.h \
     backend_config_dialog.h
 

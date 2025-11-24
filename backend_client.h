@@ -19,7 +19,7 @@ struct User {
     QString createdAt;
 };
 
-struct FingerprintTemplate {
+struct BackendFingerprintTemplate {
     int userId;
     QString finger;
     QByteArray templateData;
@@ -57,8 +57,8 @@ signals:
     void userRetrieved(const User& user);
     void userFingersRetrieved(int userId, const QStringList& fingers);
     void templateStored(int userId, const QString& finger);
-    void templateLoaded(const FingerprintTemplate& template);
-    void templatesLoaded(const QVector<FingerprintTemplate>& templates);
+    void templateLoaded(const BackendFingerprintTemplate& tmpl);
+    void templatesLoaded(const QVector<BackendFingerprintTemplate>& templates);
     void authLogged();
     void error(const QString& errorMessage);
 
@@ -69,6 +69,7 @@ private:
     QNetworkAccessManager* m_networkManager;
     QString m_baseUrl;
     QMap<QNetworkReply*, QString> m_requestTypes; // Track request types
+    QMap<QNetworkReply*, QPair<int, QString>> m_storeTemplateParams; // Store userId and finger for storeTemplate
 
     void handleUserCreated(QNetworkReply* reply);
     void handleUsersListed(QNetworkReply* reply);

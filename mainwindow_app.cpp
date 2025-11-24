@@ -1,6 +1,5 @@
 #include "mainwindow_app.h"
-#include "database_config_dialog.h"
-#include "identification_dialog.h"
+#include "backend_config_dialog.h"
 #include <QApplication>
 #include <QMessageBox>
 #include <QDateTime>
@@ -16,7 +15,7 @@
 MainWindowApp::MainWindowApp(QWidget *parent)
     : QMainWindow(parent)
     , m_fpManager(new FingerprintManager())
-    , m_dbManager(new DatabaseManager(this))
+    , m_backendClient(new BackendClient(this))
     , m_enrollmentInProgress(false)
     , m_enrollmentSampleCount(0)
 {
@@ -37,42 +36,30 @@ MainWindowApp::MainWindowApp(QWidget *parent)
     // Connect watcher - restored for macOS async handling
     connect(&m_enrollWatcher, &QFutureWatcher<int>::finished, this, &MainWindowApp::onCaptureEnrollFinished);
 
-    // Initialize database with configuration dialog
-    if (!DatabaseConfigDialog::hasConfig()) {
-        DatabaseConfigDialog dlg(this);
+    // Initialize backend client
+    if (!BackendConfigDialog::hasConfig()) {
+        BackendConfigDialog dlg(this);
         if (dlg.exec() != QDialog::Accepted) {
-            QMessageBox::warning(this, "Configuration", "Database configuration required. Exiting.");
-            // We can't easily exit here in constructor without showing window first or using timer.
-            // But we can disable functionality or close in showEvent.
-            // For now, just let it be uninitialized and buttons disabled.
-            updateStatus("Database not configured", true);
+            QMessageBox::warning(this, "Configuration", "Backend configuration required. Exiting.");
+            updateStatus("Backend not configured", true);
             return;
         }
     }
     
-    DatabaseConfigDialog::Config dbConfig = DatabaseConfigDialog::loadConfig();
-    if (!m_dbManager->initialize(dbConfig)) {
-        QMessageBox::critical(this, "Database Error", 
-            QString("Failed to initialize database: %1").arg(m_dbManager->getLastError()));
-        
-        // Offer to reconfigure
-        if (QMessageBox::question(this, "Retry?", "Would you like to reconfigure database?") == QMessageBox::Yes) {
-             DatabaseConfigDialog dlg(this);
-             if (dlg.exec() == QDialog::Accepted) {
-                 dbConfig = DatabaseConfigDialog::loadConfig();
-                 if (m_dbManager->initialize(dbConfig)) {
-                     goto db_success;
-                 }
-             }
-        }
-        updateStatus("Database initialization failed", true);
-    } else {
-db_success:
-        log("Database initialized successfully");
-        qDebug() << "Calling updateUserList()...";
-        updateUserList();
-        qDebug() << "updateUserList() returned.";
-    }
+    QString backendUrl = BackendConfigDialog::loadBackendUrl();
+    m_backendClient->setBaseUrl(backendUrl);
+    
+    // Connect backend signals
+    connect(m_backendClient, &BackendClient::usersListed, this, &MainWindowApp::onUsersListed);
+    connect(m_backendClient, &BackendClient::userCreated, this, &MainWindowApp::onUserCreated);
+    connect(m_backendClient, &BackendClient::templateStored, this, &MainWindowApp::onTemplateStored);
+    connect(m_backendClient, &BackendClient::templateLoaded, this, &MainWindowApp::onTemplateLoaded);
+    connect(m_backendClient, &BackendClient::templatesLoaded, this, &MainWindowApp::onTemplatesLoaded);
+    connect(m_backendClient, &BackendClient::error, this, &MainWindowApp::onBackendError);
+    
+    log("Backend initialized successfully");
+    m_backendClient->listUsers();
+    updateStatus("Backend Connected", false);
 }
 
 MainWindowApp::~MainWindowApp()
@@ -375,43 +362,14 @@ void MainWindowApp::setupUI()
 
 void MainWindowApp::onConfigClicked()
 {
-    DatabaseConfigDialog dlg(this);
-    
-    // Connect migration request from dialog to our handler
-    connect(&dlg, &DatabaseConfigDialog::runMigrationsRequested, this, &MainWindowApp::onRunMigration);
+    BackendConfigDialog dlg(this);
     
     if (dlg.exec() == QDialog::Accepted) {
         // Config saved, re-initialize
-        reinitDatabase();
-    }
-}
-
-void MainWindowApp::onRunMigration()
-{
-    log("Executing manual database migration...");
-    if (m_dbManager->runMigrations()) {
-        log("✓ Migrations completed successfully.");
-        QMessageBox::information(this, "Migrations", "Database migrations completed successfully.");
-        updateUserList();
-    } else {
-        log(QString("❌ Migration failed: %1").arg(m_dbManager->getLastError()));
-        QMessageBox::critical(this, "Migration Error", m_dbManager->getLastError());
-    }
-}
-
-void MainWindowApp::reinitDatabase()
-{
-    log("Re-initializing database connection...");
-    DatabaseConfigDialog::Config config = DatabaseConfigDialog::loadConfig();
-    
-    if (m_dbManager->initialize(config)) {
-        log("✓ Database re-initialized successfully.");
-        updateUserList();
-        updateStatus("Database Connected", false);
-    } else {
-        log(QString("❌ Database init failed: %1").arg(m_dbManager->getLastError()));
-        updateStatus("Database Connection Failed", true);
-        QMessageBox::critical(this, "Database Error", "Failed to re-initialize database.\n" + m_dbManager->getLastError());
+        QString backendUrl = BackendConfigDialog::loadBackendUrl();
+        m_backendClient->setBaseUrl(backendUrl);
+        updateStatus("Backend Connected", false);
+        m_backendClient->listUsers();
     }
 }
 
@@ -455,10 +413,7 @@ void MainWindowApp::onEnrollClicked()
         return;
     }
     
-    if (m_dbManager->userExists(name)) {
-        QMessageBox::warning(this, "User Exists", "A user with this name already exists");
-        return;
-    }
+    // User existence check will be done by backend
     
     if (!m_fpManager->startEnrollment()) {
         QMessageBox::critical(this, "Error", m_fpManager->getLastError());
@@ -507,6 +462,14 @@ void MainWindowApp::onEnrollClicked()
 void MainWindowApp::onCaptureEnrollSample()
 {
     if (!m_enrollmentInProgress) {
+        return;
+    }
+    
+    // Check if device is still open
+    if (!m_fpManager->isReaderOpen()) {
+        QMessageBox::warning(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
+        m_enrollmentInProgress = false;
+        enableEnrollmentControls(true);
         return;
     }
     
@@ -576,33 +539,14 @@ void MainWindowApp::processEnrollmentResult(int result)
         
         log(QString("Template created, size: %1 bytes").arg(templateData.size()));
         
-        // Capture raw image for image-based matching (compatible with Android)
-        QByteArray imageData;
-        bool imageCaptured = m_fpManager->captureRawImage(imageData);
-        if (imageCaptured) {
-            log(QString("Raw image captured, size: %1 bytes").arg(imageData.size()));
-        } else {
-            log(QString("Warning: Failed to capture raw image: %1").arg(m_fpManager->getLastError()));
-            log("Enrollment will continue without raw image (FP3 template only)");
-        }
+        // Create user and store template via backend API
+        m_pendingEnrollmentTemplate = templateData;
+        m_pendingEnrollmentFinger = "Right Index"; // Default finger
+        m_backendClient->createUser(m_enrollmentUserName, m_enrollmentUserEmail);
+        // Note: template will be stored in onUserCreated slot after user is created
         
-        int userId;
-        if (!m_dbManager->addUser(m_enrollmentUserName, m_enrollmentUserEmail, templateData, imageData, userId)) {
-            QMessageBox::critical(this, "Database Error", 
-                QString("Failed to save user:\n%1").arg(m_dbManager->getLastError()));
-            log(QString("❌ Database error: %1").arg(m_dbManager->getLastError()));
-        } else {
-            log(QString("User enrolled successfully: %1 (ID: %2)").arg(m_enrollmentUserName).arg(userId));
-            QMessageBox::information(this, "Enrollment Complete", 
-                QString("User '%1' enrolled successfully!\n\nUser ID: %2\nTemplate size: %3 bytes\nScans completed: 5")
-                    .arg(m_enrollmentUserName)
-                    .arg(userId)
-                    .arg(templateData.size()));
-            updateUserList();
-            
-            m_editEnrollName->clear();
-            m_editEnrollEmail->clear();
-        }
+        m_editEnrollName->clear();
+        m_editEnrollEmail->clear();
         
         log("Cleaning up enrollment session...");
         m_fpManager->cancelEnrollment();
@@ -648,8 +592,18 @@ void MainWindowApp::onIdentifyClicked()
         return;
     }
     
-    IdentificationDialog dlg(m_fpManager, m_dbManager, this);
-    dlg.exec();
+    // Check if device is still open and ready
+    if (!m_fpManager->isReaderOpen()) {
+        QMessageBox::warning(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
+        return;
+    }
+    
+    m_btnIdentify->setEnabled(false);
+    log("=== IDENTIFICATION STARTED ===");
+    log("Loading all templates from backend...");
+    
+    // Load all templates from backend for identification
+    m_backendClient->loadTemplates();
 }
 
 void MainWindowApp::onVerifyClicked()
@@ -659,70 +613,47 @@ void MainWindowApp::onVerifyClicked()
         return;
     }
     
+    // Check if device is still open
+    if (!m_fpManager->isReaderOpen()) {
+        QMessageBox::warning(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
+        return;
+    }
+    
+    // Store selected user info
+    QListWidgetItem* item = m_userList->selectedItems().first();
+    m_verificationUserId = item->data(Qt::UserRole).toInt();
+    QStringList parts = item->text().split(" - ");
+    if (parts.size() >= 1) {
+        m_verificationUserName = parts.at(0);
+    }
+    if (parts.size() >= 2) {
+        QString emailPart = parts.at(1);
+        if (emailPart.contains("(")) {
+            m_verificationUserEmail = emailPart.section(" (", 0, 0);
+        } else {
+            m_verificationUserEmail = "";
+        }
+    }
+    
     m_btnStartVerify->setEnabled(false);
-    m_btnCaptureVerify->setEnabled(true);
-    m_verifyResultLabel->setText("Result: Waiting for capture...");
-    m_verifyScoreLabel->setText("Score: -");
-    log("Verification started. Place finger on reader.");
+    m_verifyResultLabel->setText("Loading template...");
+    m_verifyScoreLabel->setText("Please wait...");
+    log(QString("Verification started for user ID: %1").arg(m_verificationUserId));
+    
+    // Load template and verify immediately
+    QString finger = "Right Index"; // Default, can be enhanced with combobox
+    m_backendClient->loadTemplate(m_verificationUserId, finger);
 }
 
 void MainWindowApp::onCaptureVerifySample()
 {
+    // Verification now happens directly in onVerifyClicked
+    // This method is kept for UI compatibility but redirects to onVerifyClicked
     if (m_userList->selectedItems().isEmpty()) {
+        QMessageBox::warning(this, "Selection Required", "Please select a user from the list");
         return;
     }
-    
-    m_btnCaptureVerify->setEnabled(false);
-    log("=== VERIFICATION: Place finger on reader NOW ===");
-    m_verifyResultLabel->setText("Capturing...");
-    m_verifyScoreLabel->setText("Please wait...");
-    
-    QApplication::processEvents();
-    
-    QListWidgetItem* item = m_userList->selectedItems().first();
-    int userId = item->data(Qt::UserRole).toInt();
-    
-    User user;
-    if (!m_dbManager->getUserById(userId, user)) {
-        QMessageBox::critical(this, "Error", "Failed to load user data");
-        log("❌ Failed to load user data");
-        m_btnStartVerify->setEnabled(true);
-        return;
-    }
-    
-    log(QString("Verifying against: %1").arg(user.name));
-    
-    int score = 0;
-    bool matched = m_fpManager->verifyFingerprint(user.fingerprintTemplate, score);
-    
-    if (!matched && score == 0) {
-        QString error = m_fpManager->getLastError();
-        log(QString("Verification error: %1").arg(error));
-        m_verifyResultLabel->setText("Result: ERROR");
-        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcccc; color: red; padding: 5px; font-weight: bold; }");
-        m_verifyScoreLabel->setText("Score: -");
-        QMessageBox::critical(this, "Verification Error", error);
-    } else {
-        m_verifyScoreLabel->setText(QString("Match Score: %1%").arg(score));
-        
-        if (score >= 60) {
-            m_verifyResultLabel->setText(QString("MATCH: %1").arg(user.name));
-            m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: green; padding: 10px; font-weight: bold; font-size: 14px; }");
-            log(QString("VERIFICATION SUCCESS: %1 (score: %2%)").arg(user.name).arg(score));
-            QMessageBox::information(this, "Verification Success", 
-                QString("Fingerprint MATCHED!\n\nUser: %1\nScore: %2%").arg(user.name).arg(score));
-        } else {
-            m_verifyResultLabel->setText(QString("NO MATCH"));
-            m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
-            log(QString("VERIFICATION FAILED (score: %1%)").arg(score));
-            QMessageBox::warning(this, "Verification Failed", 
-                QString("Fingerprint does NOT match!\n\nExpected: %1\nScore: %2%")
-                    .arg(user.name).arg(score));
-        }
-    }
-    
-    m_btnStartVerify->setEnabled(true);
-    log("=== VERIFICATION COMPLETED ===");
+    onVerifyClicked();
 }
 
 void MainWindowApp::onRefreshUserList()
@@ -742,7 +673,6 @@ void MainWindowApp::onDeleteUserClicked()
     }
     
     QListWidgetItem* item = m_userList->selectedItems().first();
-    int userId = item->data(Qt::UserRole).toInt();
     QString userName = item->text().section(" - ", 0, 0);
     
     auto reply = QMessageBox::question(this, "Confirm Delete", 
@@ -750,13 +680,8 @@ void MainWindowApp::onDeleteUserClicked()
         QMessageBox::Yes | QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        if (m_dbManager->deleteUser(userId)) {
-            log(QString("User deleted: %1").arg(userName));
-            updateUserList();
-        } else {
-            QMessageBox::critical(this, "Error", 
-                QString("Failed to delete user: %1").arg(m_dbManager->getLastError()));
-        }
+        // User deletion needs backend API endpoint
+        QMessageBox::information(this, "Not Implemented", "User deletion needs backend API endpoint");
     }
 }
 
@@ -785,21 +710,177 @@ void MainWindowApp::log(const QString& message)
 
 void MainWindowApp::updateUserList()
 {
+    // Request users from backend
+    m_backendClient->listUsers();
+}
+
+void MainWindowApp::onUsersListed(const QVector<User>& users)
+{
     m_userList->clear();
     
-    QVector<User> users = m_dbManager->getAllUsers();
-    
     for (const User& user : users) {
-        QString displayText = QString("%1 - %2").arg(user.name).arg(user.email.isEmpty() ? "No email" : user.email);
+        QString displayText = QString("%1 - %2 (%3 fingers)").arg(user.name).arg(user.email.isEmpty() ? "No email" : user.email).arg(user.fingerCount);
         QListWidgetItem* item = new QListWidgetItem(displayText);
         item->setData(Qt::UserRole, user.id);
         m_userList->addItem(item);
     }
     
     m_userCountLabel->setText(QString("Total users: %1").arg(users.size()));
-    qDebug() << "Updating user count label done.";
     log(QString("User list updated: %1 users").arg(users.size()));
-    qDebug() << "Log called.";
+}
+
+void MainWindowApp::onUserCreated(int userId)
+{
+    log(QString("User created: ID %1").arg(userId));
+    // Store template after user is created
+    if (!m_pendingEnrollmentTemplate.isEmpty()) {
+        m_backendClient->storeTemplate(userId, m_pendingEnrollmentTemplate, m_pendingEnrollmentFinger);
+        m_pendingEnrollmentTemplate.clear();
+    }
+    m_backendClient->listUsers();
+}
+
+void MainWindowApp::onTemplateStored(int userId, const QString& finger)
+{
+    log(QString("Template stored for user %1, finger %2").arg(userId).arg(finger));
+    QMessageBox::information(this, "Enrollment Complete", 
+        QString("User enrolled successfully!\n\nUser ID: %1\nFinger: %2").arg(userId).arg(finger));
+    m_backendClient->listUsers();
+}
+
+void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
+{
+    // Handle template loaded for verification
+    log(QString("Template loaded for user %1, finger %2").arg(tmpl.userId).arg(tmpl.finger));
+    
+    // Check if device is still open
+    if (!m_fpManager->isReaderOpen()) {
+        QMessageBox::critical(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
+        m_btnStartVerify->setEnabled(true);
+        m_btnCaptureVerify->setEnabled(false);
+        return;
+    }
+    
+    m_verifyResultLabel->setText("Capturing...");
+    m_verifyScoreLabel->setText("Please wait...");
+    QApplication::processEvents();
+    
+    int score = 0;
+    bool matched = m_fpManager->verifyFingerprint(tmpl.templateData, score);
+    
+    if (!matched && score == 0) {
+        QString error = m_fpManager->getLastError();
+        log(QString("Verification error: %1").arg(error));
+        m_verifyResultLabel->setText("Result: ERROR");
+        m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcccc; color: red; padding: 5px; font-weight: bold; }");
+        m_verifyScoreLabel->setText("Score: -");
+        QMessageBox::critical(this, "Verification Error", error);
+    } else {
+        m_verifyScoreLabel->setText(QString("Match Score: %1%").arg(score));
+        
+        // Use stored user info from onUserSelected
+        QString userName = m_verificationUserName.isEmpty() ? 
+            (tmpl.userName.isEmpty() ? QString("User %1").arg(tmpl.userId) : tmpl.userName) : 
+            m_verificationUserName;
+        
+        if (score >= 60) {
+            m_verifyResultLabel->setText(QString("MATCH: %1").arg(userName));
+            m_verifyResultLabel->setStyleSheet("QLabel { background-color: #c8e6c9; color: green; padding: 10px; font-weight: bold; font-size: 14px; }");
+            log(QString("VERIFICATION SUCCESS: %1 (score: %2%)").arg(userName).arg(score));
+            QMessageBox::information(this, "Verification Success", 
+                QString("Fingerprint MATCHED!\n\nUser: %1\nFinger: %2\nScore: %3%").arg(userName).arg(tmpl.finger).arg(score));
+        } else {
+            m_verifyResultLabel->setText(QString("NO MATCH"));
+            m_verifyResultLabel->setStyleSheet("QLabel { background-color: #ffcdd2; color: red; padding: 10px; font-weight: bold; font-size: 14px; }");
+            log(QString("VERIFICATION FAILED (score: %1%)").arg(score));
+            QMessageBox::warning(this, "Verification Failed", 
+                QString("Fingerprint does NOT match!\n\nExpected: %1\nScore: %2%")
+                    .arg(userName).arg(score));
+        }
+    }
+    
+    m_btnStartVerify->setEnabled(true);
+    m_btnCaptureVerify->setEnabled(false);
+    log("=== VERIFICATION COMPLETED ===");
+}
+
+void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& fingers)
+{
+    if (userId == m_verificationUserId) {
+        log(QString("User %1 has %2 registered finger(s)").arg(userId).arg(fingers.size()));
+        // Could populate combobox here if we add one
+    }
+}
+
+void MainWindowApp::onTemplatesLoaded(const QVector<BackendFingerprintTemplate>& templates)
+{
+    // Handle templates loaded for identification
+    log(QString("Loaded %1 templates for identification").arg(templates.size()));
+    
+    if (templates.isEmpty()) {
+        QMessageBox::warning(this, "No Templates", "No fingerprint templates found. Please enroll users first.");
+        m_btnIdentify->setEnabled(true);
+        return;
+    }
+    
+    // Check if device is still open
+    if (!m_fpManager->isReaderOpen()) {
+        QMessageBox::critical(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
+        m_btnIdentify->setEnabled(true);
+        return;
+    }
+    
+    // Prepare templates vector for identifyUser (like Android implementation)
+    // IMPORTANT: Use ALL templates (all fingers) - this matches fingerprint-sdk implementation
+    QVector<QPair<int, QByteArray>> templatePairs;
+    for (const BackendFingerprintTemplate& tmpl : templates) {
+        templatePairs.append(qMakePair(tmpl.userId, tmpl.templateData));
+    }
+    
+    log(QString("Prepared %1 templates for identification (all fingers)").arg(templatePairs.size()));
+    log("Place your finger on the reader...");
+    
+    // Perform identification - returns matchedIndex, not userId (like Android)
+    int score = 0;
+    int matchedIndex = -1;
+    bool success = m_fpManager->identifyUser(templatePairs, matchedIndex, score, nullptr, nullptr);
+    
+    if (!success) {
+        QString error = m_fpManager->getLastError();
+        log(QString("Identification error: %1").arg(error));
+        QMessageBox::critical(this, "Identification Error", error);
+        m_btnIdentify->setEnabled(true);
+        return;
+    }
+    
+    if (matchedIndex >= 0 && matchedIndex < templates.size()) {
+        // Get the actual matched template using the index (this gives us the correct finger!)
+        const BackendFingerprintTemplate& matchedTemplate = templates[matchedIndex];
+        int matchedUserId = matchedTemplate.userId;
+        QString matchedUserName = matchedTemplate.userName.isEmpty() ? 
+            QString("User %1").arg(matchedUserId) : matchedTemplate.userName;
+        QString matchedFinger = matchedTemplate.finger;
+        
+        log(QString("✓ IDENTIFICATION SUCCESS: %1 (User ID: %2, Finger: %3, Score: %4%)")
+            .arg(matchedUserName).arg(matchedUserId).arg(matchedFinger).arg(score));
+        
+        QMessageBox::information(this, "Identification Success", 
+            QString("User IDENTIFIED!\n\nUser: %1\nUser ID: %2\nFinger: %3\nScore: %4%")
+            .arg(matchedUserName).arg(matchedUserId).arg(matchedFinger).arg(score));
+    } else {
+        log(QString("✗ IDENTIFICATION FAILED: No match found (score: %1%)").arg(score));
+        QMessageBox::warning(this, "Identification Failed", 
+            QString("No matching fingerprint found!\n\nScore: %1%").arg(score));
+    }
+    
+    m_btnIdentify->setEnabled(true);
+    log("=== IDENTIFICATION COMPLETED ===");
+}
+
+void MainWindowApp::onBackendError(const QString& errorMessage)
+{
+    log(QString("Backend error: %1").arg(errorMessage));
+    QMessageBox::warning(this, "Backend Error", errorMessage);
 }
 
 void MainWindowApp::enableEnrollmentControls(bool enable)

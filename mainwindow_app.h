@@ -15,8 +15,8 @@
 // DigitalPersona Library
 #include <digitalpersona.h>
 
-// Local database manager
-#include "database_manager.h"
+// Backend client
+#include "backend_client.h"
 #include <QFutureWatcher>
 #include <QCloseEvent>
 
@@ -42,8 +42,15 @@ private slots:
     void onUserSelected(QListWidgetItem* item);
     void onDeleteUserClicked();
     void onClearLog();
-    void onConfigClicked(); // Show database configuration
-    void onRunMigration(); // Handle manual migration request
+    void onConfigClicked(); // Show backend configuration
+    // BackendClient slots
+    void onUsersListed(const QVector<User>& users);
+    void onUserCreated(int userId);
+    void onTemplateStored(int userId, const QString& finger);
+    void onTemplateLoaded(const BackendFingerprintTemplate& tmpl);
+    void onTemplatesLoaded(const QVector<BackendFingerprintTemplate>& templates);
+    void onUserFingersRetrieved(int userId, const QStringList& fingers);
+    void onBackendError(const QString& errorMessage);
 
 private:
     void setupUI();
@@ -59,14 +66,21 @@ private:
     // DigitalPersona Library instance
     FingerprintManager* m_fpManager;
     
-    // Local database manager
-    DatabaseManager* m_dbManager;
+    // Backend client
+    BackendClient* m_backendClient;
     
     // Enrollment state
     bool m_enrollmentInProgress;
     int m_enrollmentSampleCount;
     QString m_enrollmentUserName;
     QString m_enrollmentUserEmail;
+    QByteArray m_pendingEnrollmentTemplate;
+    QString m_pendingEnrollmentFinger;
+    
+    // Verification state
+    int m_verificationUserId;
+    QString m_verificationUserName;
+    QString m_verificationUserEmail;
     
     // Threading
     QFutureWatcher<int> m_enrollWatcher;

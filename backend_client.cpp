@@ -121,6 +121,7 @@ void BackendClient::storeTemplate(int userId, const QByteArray& templateData, co
 
     QNetworkReply* reply = m_networkManager->post(request, QJsonDocument(json).toJson());
     m_requestTypes[reply] = "storeTemplate";
+    m_storeTemplateParams[reply] = qMakePair(userId, finger); // Store params
     qDebug() << "BackendClient: Storing template for user" << userId << "finger" << finger;
 }
 
@@ -199,16 +200,7 @@ void BackendClient::onReplyFinished(QNetworkReply* reply)
         return;
     }
 
-    QByteArray data = reply->readAll();
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-
-    if (parseError.error != QJsonParseError::NoError) {
-        emit error(QString("JSON parse error: %1").arg(parseError.errorString()));
-        reply->deleteLater();
-        return;
-    }
-
+    // Route to appropriate handler - handlers will read data themselves
     if (requestType == "createUser") {
         handleUserCreated(reply);
     } else if (requestType == "listUsers") {
@@ -247,9 +239,26 @@ void BackendClient::handleUserCreated(QNetworkReply* reply)
 
 void BackendClient::handleUsersListed(QNetworkReply* reply)
 {
+    if (reply->error() != QNetworkReply::NoError) {
+        emit error(QString("Failed to list users: %1").arg(reply->errorString()));
+        qDebug() << "BackendClient: Error listing users:" << reply->errorString();
+        return;
+    }
+
     QByteArray data = reply->readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
+    qDebug() << "BackendClient: Received response:" << data;
+    
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    
+    if (parseError.error != QJsonParseError::NoError) {
+        emit error(QString("JSON parse error: %1").arg(parseError.errorString()));
+        qDebug() << "BackendClient: JSON parse error:" << parseError.errorString();
+        return;
+    }
+
     QJsonArray array = doc.array();
+    qDebug() << "BackendClient: Parsed array with" << array.size() << "users";
 
     QVector<User> users;
     for (const QJsonValue& value : array) {
@@ -261,14 +270,21 @@ void BackendClient::handleUsersListed(QNetworkReply* reply)
         user.fingerCount = obj["finger_count"].toInt();
         user.createdAt = obj["created_at"].toString();
         users.append(user);
+        qDebug() << "BackendClient: Parsed user:" << user.id << user.name << user.email << "fingers:" << user.fingerCount;
     }
 
     emit usersListed(users);
-    qDebug() << "BackendClient: Listed" << users.size() << "users";
+    qDebug() << "BackendClient: Emitted usersListed signal with" << users.size() << "users";
 }
 
 void BackendClient::handleUserRetrieved(QNetworkReply* reply)
 {
+    if (reply->error() != QNetworkReply::NoError) {
+        emit error(QString("Failed to retrieve user: %1").arg(reply->errorString()));
+        qDebug() << "BackendClient: Error retrieving user:" << reply->errorString();
+        return;
+    }
+
     QByteArray data = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonObject obj = doc.object();
@@ -305,15 +321,29 @@ void BackendClient::handleUserFingersRetrieved(QNetworkReply* reply)
 
 void BackendClient::handleTemplateStored(QNetworkReply* reply)
 {
+    if (reply->error() != QNetworkReply::NoError) {
+        emit error(QString("Failed to store template: %1").arg(reply->errorString()));
+        qDebug() << "BackendClient: Error storing template:" << reply->errorString();
+        m_storeTemplateParams.remove(reply);
+        return;
+    }
+
     QByteArray data = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonObject obj = doc.object();
 
-    int userId = obj["user_id"].toInt();
-    QString finger = obj["finger"].toString();
+    // Get userId and finger from stored params (backend response doesn't include them)
+    QPair<int, QString> params = m_storeTemplateParams.take(reply);
+    int userId = params.first;
+    QString finger = params.second;
 
-    emit templateStored(userId, finger);
-    qDebug() << "BackendClient: Template stored for user" << userId << "finger" << finger;
+    if (obj.contains("success") && obj["success"].toBool()) {
+        emit templateStored(userId, finger);
+        qDebug() << "BackendClient: Template stored for user" << userId << "finger" << finger;
+    } else {
+        QString errorMsg = obj.contains("error") ? obj["error"].toString() : "Unknown error";
+        emit error(QString("Failed to store template: %1").arg(errorMsg));
+    }
 }
 
 void BackendClient::handleTemplateLoaded(QNetworkReply* reply)
@@ -322,35 +352,41 @@ void BackendClient::handleTemplateLoaded(QNetworkReply* reply)
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonObject obj = doc.object();
 
-    FingerprintTemplate template;
-    template.userId = obj["user_id"].toInt();
-    template.finger = obj["finger"].toString();
+    BackendFingerprintTemplate tmpl;
+    tmpl.userId = obj["user_id"].toInt();
+    tmpl.finger = obj["finger"].toString();
     QString base64Template = obj["template"].toString();
-    template.templateData = QByteArray::fromBase64(base64Template.toUtf8());
-    template.createdAt = obj["created_at"].toString();
+    tmpl.templateData = QByteArray::fromBase64(base64Template.toUtf8());
+    tmpl.createdAt = obj["created_at"].toString();
 
-    emit templateLoaded(template);
-    qDebug() << "BackendClient: Template loaded for user" << template.userId << "finger" << template.finger;
+    emit templateLoaded(tmpl);
+    qDebug() << "BackendClient: Template loaded for user" << tmpl.userId << "finger" << tmpl.finger;
 }
 
 void BackendClient::handleTemplatesLoaded(QNetworkReply* reply)
 {
+    if (reply->error() != QNetworkReply::NoError) {
+        emit error(QString("Failed to load templates: %1").arg(reply->errorString()));
+        qDebug() << "BackendClient: Error loading templates:" << reply->errorString();
+        return;
+    }
+
     QByteArray data = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonArray array = doc.array();
 
-    QVector<FingerprintTemplate> templates;
+    QVector<BackendFingerprintTemplate> templates;
     for (const QJsonValue& value : array) {
         QJsonObject obj = value.toObject();
-        FingerprintTemplate template;
-        template.userId = obj["user_id"].toInt();
-        template.finger = obj["finger"].toString();
-        template.userName = obj["user_name"].toString();
-        template.userEmail = obj["user_email"].toString();
+        BackendFingerprintTemplate tmpl;
+        tmpl.userId = obj["user_id"].toInt();
+        tmpl.finger = obj["finger"].toString();
+        tmpl.userName = obj["user_name"].toString();
+        tmpl.userEmail = obj["user_email"].toString();
         QString base64Template = obj["template"].toString();
-        template.templateData = QByteArray::fromBase64(base64Template.toUtf8());
-        template.createdAt = obj["created_at"].toString();
-        templates.append(template);
+        tmpl.templateData = QByteArray::fromBase64(base64Template.toUtf8());
+        tmpl.createdAt = obj["created_at"].toString();
+        templates.append(tmpl);
     }
 
     emit templatesLoaded(templates);
