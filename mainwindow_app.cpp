@@ -702,16 +702,6 @@ void MainWindowApp::onVerifyClicked()
     });
 }
 
-void MainWindowApp::onCaptureVerifySample()
-{
-    // Verification now happens directly in onVerifyClicked
-    // This method is kept for UI compatibility but redirects to onVerifyClicked
-    if (m_userList->selectedItems().isEmpty()) {
-        QMessageBox::warning(this, "Selection Required", "Please select a user from the list");
-        return;
-    }
-    onVerifyClicked();
-}
 
 void MainWindowApp::onRefreshUserList()
 {
@@ -856,7 +846,6 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
     if (!m_fpManager->isReaderOpen()) {
         QMessageBox::critical(this, "Device Not Ready", "Device is not open. Please initialize the reader first.");
         m_btnStartVerify->setEnabled(true);
-        m_btnCaptureVerify->setEnabled(false);
         m_verificationTemplates.clear();
         m_remainingVerificationFingers.clear();
         return;
@@ -924,7 +913,6 @@ void MainWindowApp::onTemplateLoaded(const BackendFingerprintTemplate& tmpl)
     m_verificationTemplates.clear();
     m_remainingVerificationFingers.clear();
     m_btnStartVerify->setEnabled(true);
-    m_btnCaptureVerify->setEnabled(false);
     log("=== VERIFICATION COMPLETED ===");
 }
 
