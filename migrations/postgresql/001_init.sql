@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255),
     fingerprint_template BYTEA,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    fingerprint_image BYTEA,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -1,0 +1,8 @@
+pixman-arma64-neon-asm-bilinear.lo: pixman-arma64-neon-asm-bilinear.S \
+  pixman-private.h pixman-arm-asm.h pixman-arma64-neon-asm.h
+
+pixman-private.h:
+
+pixman-arm-asm.h:
+
+pixman-arma64-neon-asm.h:

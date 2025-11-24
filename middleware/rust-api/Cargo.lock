@@ -381,9 +381,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "cc",
  "chrono",
  "dotenvy",
  "hex",
+ "pkg-config",
  "serde",
  "serde_json",
  "sqlx",

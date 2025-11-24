@@ -1,0 +1,10 @@
+prefix=/Users/rachmataditiya/Projects/uareu/android-ndk-prefix
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: OpenSSL-libcrypto
+Description: OpenSSL cryptography library
+Version: 3.2.0
+Libs: -L${libdir} -lcrypto
+Cflags: -I${includedir}

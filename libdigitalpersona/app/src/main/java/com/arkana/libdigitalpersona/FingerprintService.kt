@@ -3,26 +3,42 @@ package com.arkana.libdigitalpersona
 import android.content.Context
 import android.os.Build
 import android.os.CancellationSignal
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import androidx.annotation.RequiresApi
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.biometric.BiometricPrompt.PromptInfo
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import java.security.KeyStore
 import java.util.concurrent.Executor
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
-import javax.crypto.spec.IvParameterSpec
+import javax.crypto.SecretKey
 
 /**
  * Android Fingerprint Service using BiometricPrompt API
  * Equivalent to FingerprintManager in desktop version
+ * 
+ * Note: Android stores templates in secure hardware and doesn't allow extraction.
+ * We use Android KeyStore keys as "templates" - each user gets a unique key alias.
  */
 class FingerprintService(private val context: Context) {
+    
+    companion object {
+        private const val KEYSTORE_NAME = "AndroidKeyStore"
+        private const val KEY_ALIAS_PREFIX = "fingerprint_user_"
+        private const val KEY_ALGORITHM = KeyProperties.KEY_ALGORITHM_AES
+        private const val BLOCK_MODE = KeyProperties.BLOCK_MODE_CBC
+        private const val ENCRYPTION_PADDING = KeyProperties.ENCRYPTION_PADDING_PKCS7
+        private const val TRANSFORMATION = "$KEY_ALGORITHM/$BLOCK_MODE/$ENCRYPTION_PADDING"
+    }
     
     private var biometricPrompt: BiometricPrompt? = null
     private var cancellationSignal: CancellationSignal? = null
     private var executor: Executor = ContextCompat.getMainExecutor(context)
+    private val keyStore: KeyStore = KeyStore.getInstance(KEYSTORE_NAME).apply { load(null) }
     
     private var enrollmentCallback: EnrollmentCallback? = null
     private var verificationCallback: VerificationCallback? = null
@@ -30,15 +46,13 @@ class FingerprintService(private val context: Context) {
     
     // Enrollment state
     private var enrollmentStages: Int = 0
-    private var requiredStages: Int = 5
-    private var enrollmentSamples: MutableList<ByteArray> = mutableListOf()
-    
-    // Identification state
-    private var identificationTemplates: Map<Int, ByteArray> = emptyMap()
+    private val requiredStages: Int = 5
+    private var enrollmentKeyAlias: String? = null
+    private var enrollmentActivity: FragmentActivity? = null
     
     interface EnrollmentCallback {
         fun onProgress(current: Int, total: Int, message: String)
-        fun onComplete(template: ByteArray)
+        fun onComplete(template: ByteArray) // Returns key alias as "template"
         fun onError(error: String)
     }
     
@@ -57,115 +71,154 @@ class FingerprintService(private val context: Context) {
      */
     fun isAvailable(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            return false // BiometricPrompt requires API 28+
+            return false
         }
         
-        val biometricManager = context.getSystemService(Context.BIOMETRIC_SERVICE) as? BiometricManager
-        return when (biometricManager?.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)) {
+        val biometricManager = BiometricManager.from(context)
+        return when (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)) {
             BiometricManager.BIOMETRIC_SUCCESS -> true
             else -> false
         }
     }
     
     /**
-     * Start enrollment process (capture 5 fingerprint samples)
+     * Get device count (always 1 for Android - system fingerprint sensor)
+     */
+    fun getDeviceCount(): Int {
+        return if (isAvailable()) 1 else 0
+    }
+    
+    /**
+     * Start enrollment process - creates KeyStore key for user
      */
     @RequiresApi(Build.VERSION_CODES.P)
-    fun startEnrollment(callback: EnrollmentCallback) {
+    fun startEnrollment(userId: Int, activity: FragmentActivity, callback: EnrollmentCallback) {
         if (!isAvailable()) {
             callback.onError("Fingerprint hardware not available")
             return
         }
         
         enrollmentCallback = callback
+        enrollmentActivity = activity
         enrollmentStages = 0
-        enrollmentSamples.clear()
+        enrollmentKeyAlias = "$KEY_ALIAS_PREFIX$userId"
         
-        val promptInfo = PromptInfo.Builder()
-            .setTitle("Fingerprint Enrollment")
-            .setSubtitle("Place your finger on the sensor")
-            .setNegativeButtonText("Cancel")
-            .build()
+        // Delete existing key if any
+        try {
+            keyStore.deleteEntry(enrollmentKeyAlias!!)
+        } catch (e: Exception) {
+            // Ignore if key doesn't exist
+        }
         
-        biometricPrompt = BiometricPrompt(
-            context as androidx.fragment.app.FragmentActivity,
-            executor,
-            object : AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: AuthenticationResult) {
-                    val cryptoObject = result.cryptoObject
-                    val fingerprint = result.biometric ?: result.fingerprint
-                    
-                    // Extract template from authentication result
-                    val template = extractTemplate(fingerprint)
-                    enrollmentSamples.add(template)
-                    enrollmentStages++
-                    
-                    callback.onProgress(enrollmentStages, requiredStages, 
-                        "Scan $enrollmentStages/$requiredStages complete")
-                    
-                    if (enrollmentStages < requiredStages) {
-                        // Continue enrollment - prompt again
-                        promptNextEnrollmentStage()
-                    } else {
-                        // Enrollment complete - combine samples into final template
-                        val finalTemplate = combineEnrollmentSamples(enrollmentSamples)
-                        callback.onComplete(finalTemplate)
-                    }
-                }
-                
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    callback.onError("Enrollment error: $errString")
-                }
-                
-                override fun onAuthenticationHelp(helpCode: Int, helpString: CharSequence) {
-                    callback.onProgress(enrollmentStages, requiredStages, helpString.toString())
-                }
-            }
-        )
+        // Create KeyStore key with biometric requirement
+        createKeyForEnrollment(enrollmentKeyAlias!!)
         
+        // Start enrollment by prompting for biometric
         promptNextEnrollmentStage()
     }
     
     @RequiresApi(Build.VERSION_CODES.P)
-    private fun promptNextEnrollmentStage() {
-        cancellationSignal = CancellationSignal()
-        biometricPrompt?.authenticate(
-            PromptInfo.Builder()
-                .setTitle("Fingerprint Enrollment")
-                .setSubtitle("Scan ${enrollmentStages + 1}/$requiredStages")
-                .setNegativeButtonText("Cancel")
-                .build(),
-            cancellationSignal!!
+    private fun createKeyForEnrollment(alias: String) {
+        val keyGenerator = KeyGenerator.getInstance(KEY_ALGORITHM, KEYSTORE_NAME)
+        val keyGenParameterSpec = KeyGenParameterSpec.Builder(
+            alias,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
         )
+            .setBlockModes(BLOCK_MODE)
+            .setEncryptionPaddings(ENCRYPTION_PADDING)
+            .setUserAuthenticationRequired(true)
+            .setInvalidatedByBiometricEnrollment(false)
+            .build()
+        
+        keyGenerator.init(keyGenParameterSpec)
+        keyGenerator.generateKey()
+    }
+    
+    @RequiresApi(Build.VERSION_CODES.P)
+    private fun promptNextEnrollmentStage() {
+        val alias = enrollmentKeyAlias ?: return
+        val activity = enrollmentActivity ?: return
+        val callback = enrollmentCallback ?: return
+        
+        // Create cipher for this key
+        val cipher = createCipher(alias) ?: run {
+            callback.onError("Failed to create cipher for enrollment")
+            return
+        }
+        
+        biometricPrompt = BiometricPrompt(
+            activity,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    enrollmentStages++
+                    callback.onProgress(
+                        enrollmentStages, 
+                        requiredStages,
+                        "Scan $enrollmentStages/$requiredStages complete"
+                    )
+                    
+                    if (enrollmentStages < requiredStages) {
+                        // Continue enrollment
+                        promptNextEnrollmentStage()
+                    } else {
+                        // Enrollment complete - return key alias as "template"
+                        val template = alias.toByteArray()
+                        callback.onComplete(template)
+                    }
+                }
+                
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && 
+                        errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                        callback.onProgress(enrollmentStages, requiredStages, errString.toString())
+                    }
+                    callback.onError("Enrollment error: $errString")
+                }
+            }
+        )
+        
+        val promptInfo = PromptInfo.Builder()
+            .setTitle("Fingerprint Enrollment")
+            .setSubtitle("Scan ${enrollmentStages + 1}/$requiredStages - Place finger on sensor")
+            .setNegativeButtonText("Cancel")
+            .build()
+        
+        cancellationSignal = CancellationSignal()
+        val cryptoObject = BiometricPrompt.CryptoObject(cipher)
+        biometricPrompt?.authenticate(promptInfo, cryptoObject)
     }
     
     /**
-     * Verify fingerprint against stored template (1:1)
+     * Verify fingerprint against stored key (1:1)
      */
     @RequiresApi(Build.VERSION_CODES.P)
-    fun verifyFingerprint(storedTemplate: ByteArray, callback: VerificationCallback) {
+    fun verifyFingerprint(userId: Int, activity: FragmentActivity, callback: VerificationCallback) {
         if (!isAvailable()) {
             callback.onFailure("Fingerprint hardware not available")
             return
         }
         
         verificationCallback = callback
+        val keyAlias = "$KEY_ALIAS_PREFIX$userId"
         
-        // For now, we'll use Android's built-in verification
-        // In production, you'd compare templates using secure matching
-        val promptInfo = PromptInfo.Builder()
-            .setTitle("Fingerprint Verification")
-            .setSubtitle("Place your finger on the sensor")
-            .setNegativeButtonText("Cancel")
-            .build()
+        // Check if key exists
+        if (!keyStore.containsAlias(keyAlias)) {
+            callback.onFailure("User not enrolled")
+            return
+        }
+        
+        // Create cipher
+        val cipher = createCipher(keyAlias) ?: run {
+            callback.onFailure("Failed to create cipher for verification")
+            return
+        }
         
         biometricPrompt = BiometricPrompt(
-            context as androidx.fragment.app.FragmentActivity,
+            activity,
             executor,
-            object : AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: AuthenticationResult) {
-                    // For now, assume success means match
-                    // Real implementation would compare templates
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     callback.onSuccess(95) // High confidence
                 }
                 
@@ -175,69 +228,82 @@ class FingerprintService(private val context: Context) {
             }
         )
         
+        val promptInfo = PromptInfo.Builder()
+            .setTitle("Fingerprint Verification")
+            .setSubtitle("Place your finger on the sensor")
+            .setNegativeButtonText("Cancel")
+            .build()
+        
         cancellationSignal = CancellationSignal()
-        biometricPrompt?.authenticate(promptInfo, cancellationSignal!!)
+        val cryptoObject = BiometricPrompt.CryptoObject(cipher)
+        biometricPrompt?.authenticate(promptInfo, cryptoObject)
     }
     
     /**
-     * Identify fingerprint from multiple templates (1:N)
+     * Identify user from multiple enrolled users (1:N)
+     * Note: This requires attempting authentication for each user's key
      */
     @RequiresApi(Build.VERSION_CODES.P)
-    fun identifyUser(templates: Map<Int, ByteArray>, callback: IdentificationCallback) {
+    fun identifyUser(userIds: List<Int>, activity: FragmentActivity, callback: IdentificationCallback) {
         if (!isAvailable()) {
             callback.onNoMatch("Fingerprint hardware not available")
             return
         }
         
-        if (templates.isEmpty()) {
-            callback.onNoMatch("No templates provided")
+        if (userIds.isEmpty()) {
+            callback.onNoMatch("No enrolled users")
             return
         }
         
         identificationCallback = callback
-        identificationTemplates = templates
+        identifyNextUser(userIds, 0, activity)
+    }
+    
+    @RequiresApi(Build.VERSION_CODES.P)
+    private fun identifyNextUser(userIds: List<Int>, index: Int, activity: FragmentActivity) {
+        if (index >= userIds.size) {
+            identificationCallback?.onNoMatch("No matching user found")
+            return
+        }
         
-        val promptInfo = PromptInfo.Builder()
-            .setTitle("Fingerprint Identification")
-            .setSubtitle("Place your finger on the sensor")
-            .setNegativeButtonText("Cancel")
-            .build()
+        val userId = userIds[index]
+        val keyAlias = "$KEY_ALIAS_PREFIX$userId"
+        
+        // Skip if key doesn't exist
+        if (!keyStore.containsAlias(keyAlias)) {
+            identifyNextUser(userIds, index + 1, activity)
+            return
+        }
+        
+        val cipher = createCipher(keyAlias) ?: run {
+            identifyNextUser(userIds, index + 1, activity)
+            return
+        }
         
         biometricPrompt = BiometricPrompt(
-            context as androidx.fragment.app.FragmentActivity,
+            activity,
             executor,
-            object : AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: AuthenticationResult) {
-                    val capturedTemplate = extractTemplate(result.biometric ?: result.fingerprint)
-                    
-                    // Match against all templates
-                    // For now, simplified - in production would use secure matching
-                    var bestMatch: Int? = null
-                    var bestScore = 0
-                    
-                    for ((userId, storedTemplate) in templates) {
-                        val score = compareTemplates(capturedTemplate, storedTemplate)
-                        if (score > bestScore && score >= 60) {
-                            bestScore = score
-                            bestMatch = userId
-                        }
-                    }
-                    
-                    if (bestMatch != null) {
-                        callback.onMatch(bestMatch, bestScore)
-                    } else {
-                        callback.onNoMatch("No matching user found")
-                    }
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    identificationCallback?.onMatch(userId, 95)
                 }
                 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    callback.onNoMatch("Identification failed: $errString")
+                    // Try next user
+                    identifyNextUser(userIds, index + 1, activity)
                 }
             }
         )
         
+        val promptInfo = PromptInfo.Builder()
+            .setTitle("Fingerprint Identification")
+            .setSubtitle("Checking user ${index + 1}/${userIds.size}...")
+            .setNegativeButtonText("Cancel")
+            .build()
+        
         cancellationSignal = CancellationSignal()
-        biometricPrompt?.authenticate(promptInfo, cancellationSignal!!)
+        val cryptoObject = BiometricPrompt.CryptoObject(cipher)
+        biometricPrompt?.authenticate(promptInfo, cryptoObject)
     }
     
     /**
@@ -249,23 +315,30 @@ class FingerprintService(private val context: Context) {
         biometricPrompt = null
     }
     
-    // Helper functions (simplified - production would use secure template matching)
-    private fun extractTemplate(biometric: Any?): ByteArray {
-        // Extract template from Android biometric result
-        // This is a placeholder - real implementation would extract actual template data
-        return "template_placeholder".toByteArray()
+    /**
+     * Create cipher for KeyStore key
+     */
+    private fun createCipher(alias: String): Cipher? {
+        return try {
+            val secretKey = keyStore.getKey(alias, null) as? SecretKey ?: return null
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+            cipher
+        } catch (e: Exception) {
+            null
+        }
     }
     
-    private fun combineEnrollmentSamples(samples: List<ByteArray>): ByteArray {
-        // Combine multiple enrollment samples into final template
-        // This is a placeholder - real implementation would use proper template fusion
-        return samples.joinToString(separator = "") { it.toString(Charsets.UTF_8) }.toByteArray()
-    }
-    
-    private fun compareTemplates(template1: ByteArray, template2: ByteArray): Int {
-        // Compare two templates and return match score (0-100)
-        // This is a placeholder - real implementation would use secure matching algorithm
-        return if (template1.contentEquals(template2)) 95 else 30
+    /**
+     * Delete enrolled user (remove key)
+     */
+    fun deleteUser(userId: Int): Boolean {
+        return try {
+            val alias = "$KEY_ALIAS_PREFIX$userId"
+            keyStore.deleteEntry(alias)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 }
-

@@ -13,8 +13,8 @@ elif command -v qmake &> /dev/null; then
     # Check if default qmake is qt6
     VER=$(qmake -query QT_VERSION)
     if [[ "$VER" == 6.* ]]; then
-        QMAKE_CMD="qmake"
-    else
+    QMAKE_CMD="qmake"
+else
         echo "Warning: Default qmake is version $VER. Looking for Qt 6..."
         # Try to find qt6 specifically
         if [ -d "/opt/homebrew/opt/qt@6/bin" ]; then

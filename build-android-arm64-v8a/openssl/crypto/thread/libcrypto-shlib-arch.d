@@ -1,0 +1,13 @@
+crypto/thread/libcrypto-shlib-arch.o: crypto/thread/arch.c \
+  include/openssl/configuration.h include/internal/thread_arch.h \
+  include/openssl/e_os2.h include/openssl/macros.h \
+  include/openssl/opensslconf.h include/openssl/opensslv.h \
+  /Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/sources/android/support/include/inttypes.h \
+  include/internal/time.h include/internal/e_os.h \
+  include/openssl/crypto.h \
+  /Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/sources/android/support/include/stdlib.h \
+  include/openssl/safestack.h include/openssl/stack.h \
+  include/openssl/types.h include/openssl/cryptoerr.h \
+  include/openssl/symhacks.h include/openssl/cryptoerr_legacy.h \
+  include/openssl/core.h include/internal/numbers.h \
+  include/internal/safe_math.h

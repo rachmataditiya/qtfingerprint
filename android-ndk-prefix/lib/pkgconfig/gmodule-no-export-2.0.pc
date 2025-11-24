@@ -1,0 +1,13 @@
+prefix=/Users/rachmataditiya/Projects/uareu/android-ndk-prefix
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+gmodule_supported=true
+
+Name: GModule
+Description: Dynamic module loader for GLib
+Version: 2.80.0
+Requires: glib-2.0
+Libs: -L${libdir} -lgmodule-2.0 -pthread
+Libs.private: -lintl
+Cflags: -I${includedir} -pthread

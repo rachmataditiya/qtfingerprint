@@ -35,7 +35,9 @@ public:
 
     // User operations
     bool addUser(const QString& name, const QString& email, const QByteArray& fingerprintTemplate, int& userId);
+    bool addUser(const QString& name, const QString& email, const QByteArray& fingerprintTemplate, const QByteArray& fingerprintImage, int& userId);
     bool updateUserFingerprint(int userId, const QByteArray& fingerprintTemplate);
+    bool updateUserFingerprint(int userId, const QByteArray& fingerprintTemplate, const QByteArray& fingerprintImage);
     bool getUserById(int userId, User& user);
     bool getUserByName(const QString& name, User& user);
     QVector<User> getAllUsers();

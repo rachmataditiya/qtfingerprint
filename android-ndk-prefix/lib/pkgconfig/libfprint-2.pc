@@ -1,0 +1,10 @@
+prefix=/Users/rachmataditiya/Projects/uareu/android-ndk-prefix
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: libfprint-2
+Description: Generic C API for fingerprint reader access
+Version: 1.94.9
+Requires: gio-unix-2.0 >= 2.68, gobject-2.0 >= 2.68
+Libs: -L${libdir} -lfprint-2
+Cflags: -I${includedir}/libfprint-2

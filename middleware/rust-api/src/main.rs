@@ -1,16 +1,12 @@
 use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::Path,
     response::Json,
     routing::{get, post, delete},
     Router,
 };
-use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, Postgres};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{info, error};
-use uuid::Uuid;
+use tracing::info;
 mod database;
 mod models;
 mod handlers;
@@ -53,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    // Build application routes
+    // Build application routes - Simple CRUD only, no fingerprint matching
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/users", get(handlers::list_users))
@@ -61,8 +57,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/users/:id", get(handlers::get_user))
         .route("/users/:id", delete(handlers::delete_user))
         .route("/users/:id/fingerprint", post(handlers::enroll_fingerprint))
-        .route("/users/:id/verify", post(handlers::verify_fingerprint))
-        .route("/identify", post(handlers::identify_user))
         .route("/users/:id/fingerprint", get(handlers::get_fingerprint))
         .layer(cors)
         .with_state(app_state);

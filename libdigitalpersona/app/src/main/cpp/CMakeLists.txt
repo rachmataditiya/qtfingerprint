@@ -11,6 +11,18 @@ cmake_minimum_required(VERSION 3.22.1)
 # build script scope).
 project("libdigitalpersona")
 
+# Path to Android NDK prefix (where libfprint and dependencies are installed)
+# This should be set to the android-ndk-prefix directory created by build scripts
+set(ANDROID_NDK_PREFIX "${CMAKE_SOURCE_DIR}/../../../../android-ndk-prefix")
+
+# Include directories for libfprint and dependencies
+include_directories(
+    ${ANDROID_NDK_PREFIX}/include
+    ${ANDROID_NDK_PREFIX}/include/libfprint-2
+    ${ANDROID_NDK_PREFIX}/include/glib-2.0
+    ${ANDROID_NDK_PREFIX}/lib/glib-2.0/include
+)
+
 # Creates and names a library, sets it as either STATIC
 # or SHARED, and provides the relative paths to its source code.
 # You can define multiple libraries, and CMake builds them for you.
@@ -26,12 +38,44 @@ project("libdigitalpersona")
 # used in the AndroidManifest.xml file.
 add_library(${CMAKE_PROJECT_NAME} SHARED
         # List C/C++ source files with relative paths to this CMakeLists.txt.
-        native-lib.cpp)
+        native-lib.cpp
+        fingerprint_manager_android.cpp
+        fingerprint_capture.cpp)
+
+# Find JNI
+find_library(jnigraphics-lib jnigraphics)
+
+# Link directories for libfprint and dependencies
+link_directories(${ANDROID_NDK_PREFIX}/lib)
 
 # Specifies libraries CMake should link to your target library. You
 # can link libraries from various origins, such as libraries defined in this
 # build script, prebuilt third-party libraries, or Android system libraries.
 target_link_libraries(${CMAKE_PROJECT_NAME}
-        # List libraries link to the target library
+        # Android system libraries
         android
-        log)
+        log
+        ${jnigraphics-lib}
+        # libfprint and dependencies
+        fprint-2
+        glib-2.0
+        gobject-2.0
+        gio-2.0
+        gusb
+        usb-1.0
+        pixman-1
+        ffi
+        dl
+        m)
+
+# Copy libfprint and dependencies to jniLibs
+# This ensures they are packaged with the APK
+file(GLOB LIBFPRINT_LIBS "${ANDROID_NDK_PREFIX}/lib/*.so")
+foreach(lib ${LIBFPRINT_LIBS})
+    get_filename_component(libname ${lib} NAME)
+    add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${lib}
+        ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${libname}
+    )
+endforeach()

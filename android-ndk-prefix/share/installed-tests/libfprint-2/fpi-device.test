@@ -1,0 +1,6 @@
+[Test]
+Type=session
+# We can't use TestEnvironment as per
+#  https://gitlab.gnome.org/GNOME/gnome-desktop-testing/-/issues/1
+Exec=env G_DEBUG=fatal-warnings G_MESSAGES_DEBUG=all G_TEST_SRCDIR=/Users/rachmataditiya/Projects/uareu/libfprint_repo/tests G_TEST_BUILDDIR=/Users/rachmataditiya/Projects/uareu/libfprint_repo/libfprint_repo/builddir-android-arm64-v8a/tests FP_DEVICE_EMULATION=1 FP_DRIVERS_ALLOWLIST=virtual_image:virtual_device:virtual_device_storage FP_PRINTS_PATH=/Users/rachmataditiya/Projects/uareu/libfprint_repo/examples/prints G_TEST_SRCDIR=/Users/rachmataditiya/Projects/uareu/android-ndk-prefix/share/installed-tests/libfprint-2 G_TEST_BUILDDIR=/Users/rachmataditiya/Projects/uareu/android-ndk-prefix/libexec/installed-tests/libfprint-2 /Users/rachmataditiya/Projects/uareu/android-ndk-prefix/libexec/installed-tests/libfprint-2/test-fpi-device
+TestEnvironment=LD_LIBRARY_PATH=/Users/rachmataditiya/Projects/uareu/android-ndk-prefix/lib

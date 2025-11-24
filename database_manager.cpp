@@ -122,6 +122,11 @@ bool DatabaseManager::isOpen() const
 
 bool DatabaseManager::addUser(const QString& name, const QString& email, const QByteArray& fingerprintTemplate, int& userId)
 {
+    return addUser(name, email, fingerprintTemplate, QByteArray(), userId);
+}
+
+bool DatabaseManager::addUser(const QString& name, const QString& email, const QByteArray& fingerprintTemplate, const QByteArray& fingerprintImage, int& userId)
+{
     if (name.trimmed().isEmpty()) {
         setError("Name cannot be empty");
         return false;
@@ -132,11 +137,41 @@ bool DatabaseManager::addUser(const QString& name, const QString& email, const Q
         return false;
     }
 
+    // Check if fingerprint_image column exists
+    QSqlQuery checkQuery(m_db);
+    checkQuery.prepare("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'fingerprint_image'");
+    bool hasImageColumn = false;
+    if (checkQuery.exec() && checkQuery.next()) {
+        hasImageColumn = true;
+    }
+    
+    // For SQLite, use PRAGMA
+    if (m_db.driverName() == "QSQLITE") {
+        QSqlQuery pragmaQuery(m_db);
+        pragmaQuery.prepare("PRAGMA table_info(users)");
+        if (pragmaQuery.exec()) {
+            while (pragmaQuery.next()) {
+                if (pragmaQuery.value(1).toString() == "fingerprint_image") {
+                    hasImageColumn = true;
+                    break;
+                }
+            }
+        }
+    }
+
     QSqlQuery query(m_db);
-    query.prepare("INSERT INTO users (name, email, fingerprint_template) VALUES (:name, :email, :template)");
-    query.bindValue(":name", name.trimmed());
-    query.bindValue(":email", email.trimmed());
-    query.bindValue(":template", fingerprintTemplate);
+    if (hasImageColumn && !fingerprintImage.isEmpty()) {
+        query.prepare("INSERT INTO users (name, email, fingerprint_template, fingerprint_image) VALUES (:name, :email, :template, :image)");
+        query.bindValue(":name", name.trimmed());
+        query.bindValue(":email", email.trimmed());
+        query.bindValue(":template", fingerprintTemplate);
+        query.bindValue(":image", fingerprintImage);
+    } else {
+        query.prepare("INSERT INTO users (name, email, fingerprint_template) VALUES (:name, :email, :template)");
+        query.bindValue(":name", name.trimmed());
+        query.bindValue(":email", email.trimmed());
+        query.bindValue(":template", fingerprintTemplate);
+    }
 
     if (!query.exec()) {
         setError(QString("Failed to add user: %1").arg(query.lastError().text()));
@@ -150,15 +185,49 @@ bool DatabaseManager::addUser(const QString& name, const QString& email, const Q
 
 bool DatabaseManager::updateUserFingerprint(int userId, const QByteArray& fingerprintTemplate)
 {
+    return updateUserFingerprint(userId, fingerprintTemplate, QByteArray());
+}
+
+bool DatabaseManager::updateUserFingerprint(int userId, const QByteArray& fingerprintTemplate, const QByteArray& fingerprintImage)
+{
     if (fingerprintTemplate.isEmpty()) {
         setError("Fingerprint template cannot be empty");
         return false;
     }
 
+    // Check if fingerprint_image column exists
+    QSqlQuery checkQuery(m_db);
+    checkQuery.prepare("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'fingerprint_image'");
+    bool hasImageColumn = false;
+    if (checkQuery.exec() && checkQuery.next()) {
+        hasImageColumn = true;
+    }
+    
+    // For SQLite, use PRAGMA
+    if (m_db.driverName() == "QSQLITE") {
+        QSqlQuery pragmaQuery(m_db);
+        pragmaQuery.prepare("PRAGMA table_info(users)");
+        if (pragmaQuery.exec()) {
+            while (pragmaQuery.next()) {
+                if (pragmaQuery.value(1).toString() == "fingerprint_image") {
+                    hasImageColumn = true;
+                    break;
+                }
+            }
+        }
+    }
+
     QSqlQuery query(m_db);
-    query.prepare("UPDATE users SET fingerprint_template = :template, updated_at = CURRENT_TIMESTAMP WHERE id = :id");
-    query.bindValue(":template", fingerprintTemplate);
-    query.bindValue(":id", userId);
+    if (hasImageColumn && !fingerprintImage.isEmpty()) {
+        query.prepare("UPDATE users SET fingerprint_template = :template, fingerprint_image = :image, updated_at = CURRENT_TIMESTAMP WHERE id = :id");
+        query.bindValue(":template", fingerprintTemplate);
+        query.bindValue(":image", fingerprintImage);
+        query.bindValue(":id", userId);
+    } else {
+        query.prepare("UPDATE users SET fingerprint_template = :template, updated_at = CURRENT_TIMESTAMP WHERE id = :id");
+        query.bindValue(":template", fingerprintTemplate);
+        query.bindValue(":id", userId);
+    }
 
     if (!query.exec()) {
         setError(QString("Failed to update fingerprint: %1").arg(query.lastError().text()));

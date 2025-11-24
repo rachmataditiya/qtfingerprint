@@ -79,3 +79,12 @@ Setelah app running, Anda akan melihat:
 
 Silakan jalankan emulator dan install app untuk melihat UI-nya! 🎨
 
+## USB Device Passthrough
+
+⚠️ **Important:** Android emulator tidak support USB passthrough langsung untuk fingerprint reader.
+
+Untuk testing dengan fingerprint hardware:
+- ✅ **Recommended:** Gunakan physical Android tablet dengan USB OTG atau built-in fingerprint sensor
+- 📖 **Details:** Lihat `USB_PASSTHROUGH.md` untuk opsi lengkap
+- 🔍 **Check Device:** Jalankan `./check_usb_device.sh` untuk melihat USB devices yang terdeteksi
+

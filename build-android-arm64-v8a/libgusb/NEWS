@@ -1,0 +1,157 @@
+Version 0.4.9
+=============
+Released: 2024-04-22
+
+This release fixes the following bugs:
+ * Allow reading HID descriptors larger than 255 bytes
+ * Close the libusb handle if returning open failure
+ * Fix a buffer over-read when emulating devices
+ * Only request the BOS descriptor when bcdUSB is new enough
+
+Version 0.4.8
+=============
+Released: 2023-11-07
+
+This release adds the following feature:
+ * Add an device error code for 'busy'
+
+Version 0.4.7
+=============
+Released: 2023-10-09
+
+This release adds the following features:
+ * Add new API to get the HID descriptor data
+
+This release fixes the following bugs:
+ * Add calling convention to libusb callback functions
+
+Version 0.4.6
+=============
+Released: 2023-06-08
+
+This release fixes the following bugs:
+ * Add JSON compatibility helpers for old json-glib versions
+ * Fix emulation of devices using out-of-order BulkTransfer replies
+ * Use project_source_root to fix building as a subproject
+
+Version 0.4.5
+=============
+Released: 2023-02-08
+
+This release adds the following features:
+ * Add new API to better detect emulated replug
+
+This release fixes the following bugs:
+ * Do not emit spurious ::device-removed events when emulating
+ * Record zero-sized device events
+ * Reset the in-order event index when clearing the event array
+ * Save the libusb error if libusb_submit_transfer() fails
+
+Version 0.4.4
+=============
+Released: 2023-01-30
+
+This release adds the following features:
+ * Add new API to make emulation easier to use
+
+This release fixes the following bugs:
+ * Emit remove devices with matching tags when loading contexts
+ * Fix a critical warning when finalizing devices without endpoints
+ * Reduce the debugging level when emulating firmware
+
+Version 0.4.3
+=============
+Released: 2022-12-20
+
+This release fixes the following bugs:
+ * Export g_usb_device_has_tag()
+ * Work around a libusb issue which causes devices to appear twice
+
+Version 0.4.2
+=============
+Released: 2022-10-18
+
+This release fixes the following bugs:
+ * Close the GUsbDevice objects in gusbcmd
+ * Do not call the hotplug callback with the mutex held
+
+Version 0.4.1
+=============
+Released: 2022-10-01
+
+This release adds the following features:
+ * Allow loading and saving only devices with specific tags
+ * Include removed devices in the JSON dump
+
+This release fixes the following bug:
+ * Port from gtkdoc to gi-docgen
+
+Version 0.4.0
+=============
+Released: 2022-09-12
+
+The JSON format used to serialising devices is not yet stable, and might
+change.
+
+This release adds the following features:
+ * Add support for getting BOS descriptors
+ * Allow emulating devices by saving and replaying device events
+ * Cache the list of interfaces and descriptors
+ * Serialize the GUsbDevice to and from JSON format
+
+This release fixes the following bugs:
+ * Ignore usb.ids classes, subclasses and protocols
+ * Never dispatch idle events after the context has been destroyed
+ * Skip some functionality when emulating
+
+Version 0.3.10
+==============
+Released: 2021-01-10
+
+This release adds the following feature:
+ * Add API to change the hotplug poll interval
+
+Version 0.3.9
+=============
+Released: 2021-12-07
+
+This release fixes the following bugs:
+ * Don't hard-code the list of OS supporting --version-script
+ * Fix hotplug after threaded device removal
+ * Fix version script check for GNU BFD linker on FreeBSD
+
+Version 0.3.8
+=============
+Released: 2021-10-06
+
+This release adds the following feature:
+ * Add g_usb_device_get_string_descriptor_bytes_full
+
+This release fixes the following bugs:
+ * Add the GUsbEndpoint methods to the docs
+ * Fix hotplug handling and signal emission during enumerate
+
+Version 0.3.7
+=============
+Released: 2021-05-24
+
+This release adds the following feature:
+ * Add a FreeBSD CI target
+
+This release fixes the following bugs:
+ * Do not depend on libusb_get_parent() to fix FreeBSD compile
+ * Do not depend on libusb_get_port_number() to fix DragonFlyBSD compile
+ * Do not double-reference USB devices
+ * Do not run the tests on FreeBSD
+ * Require *any* python3 to fix FreeBSD build
+
+Version 0.3.6
+=============
+Released: 2021-03-12
+
+This release adds the following feature:
+ * Add g_usb_device_get_string_descriptor_bytes()
+
+This release fixes the following bugs:
+ * Properly set dylib versions on darwin
+ * Fix cancellation if cancellable is already cancelled

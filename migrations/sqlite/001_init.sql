@@ -3,5 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     email TEXT,
     fingerprint_template BLOB,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    fingerprint_image BLOB,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

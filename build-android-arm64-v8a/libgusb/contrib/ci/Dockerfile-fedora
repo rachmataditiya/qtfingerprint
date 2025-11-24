@@ -1,0 +1,17 @@
+FROM fedora:37
+
+RUN dnf -y update
+RUN dnf -y install \
+	diffutils \
+	glib2-devel \
+	json-glib-devel \
+	gobject-introspection-devel \
+	gi-docgen \
+	libusb1-devel \
+	meson \
+	redhat-rpm-config \
+	rpm-devel \
+	vala-devel \
+	vala
+RUN mkdir /build
+WORKDIR /build

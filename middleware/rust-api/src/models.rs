@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::NaiveDateTime;
 use sqlx::FromRow;
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
@@ -9,6 +9,8 @@ pub struct User {
     pub email: Option<String>,
     #[serde(skip_serializing)]
     pub fingerprint_template: Option<Vec<u8>>,
+    #[serde(skip_serializing)]
+    pub fingerprint_image: Option<Vec<u8>>,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
 }

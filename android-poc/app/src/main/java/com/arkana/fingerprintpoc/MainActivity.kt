@@ -1,7 +1,7 @@
 package com.arkana.fingerprintpoc
 
 import android.os.Bundle
-import android.util.Base64
+import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -22,9 +22,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var userAdapter: UserListAdapter
     
     private var isInitialized = false
-    private var enrollmentInProgress = false
-    private var currentEnrollmentUserId: Int? = null
-    private var enrollmentStages = 0
     var selectedUserId: Int? = null
         private set
     
@@ -45,14 +42,20 @@ class MainActivity : AppCompatActivity() {
             initializeReader()
         }
         
-        // Enrollment
-        binding.btnStartEnroll.setOnClickListener {
-            startEnrollment()
-        }
-        
-        // Verification
+        // Verification - Use selected user from list
         binding.btnStartVerify.setOnClickListener {
-            startVerification()
+            val userId = selectedUserId
+            if (userId == null || userId <= 0) {
+                Toast.makeText(this, "Please select a user from the list first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            
+            if (!isInitialized) {
+                Toast.makeText(this, "Please initialize fingerprint reader first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            
+            startVerification(userId)
         }
         
         // Identification
@@ -96,194 +99,218 @@ class MainActivity : AppCompatActivity() {
         
         if (available) {
             isInitialized = true
-            updateStatus("Reader initialized successfully", false)
+            updateStatus("libfprint initialized successfully", false)
             enableControls(true)
             loadUsers() // Load users from API server
         } else {
-            updateStatus("Fingerprint hardware not available (Demo mode - UI only)", false)
-            // Enable controls anyway for UI demo
-            enableControls(true)
-            loadUsers() // Still try to load users even in demo mode
+            updateStatus("libfprint not available - Please connect fingerprint reader", true)
+            enableControls(false)
         }
         
         binding.btnInitialize.isEnabled = true
         binding.btnInitialize.text = "Initialize Reader"
     }
     
-    private fun startEnrollment() {
-        val name = binding.editEnrollName.text.toString().trim()
-        val email = binding.editEnrollEmail.text.toString().trim()
-        
-        if (name.isEmpty()) {
-            Toast.makeText(this, "Please enter a name", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        if (!isInitialized) {
-            Toast.makeText(this, "Please initialize reader first", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        enrollmentInProgress = true
-        binding.btnStartEnroll.isEnabled = false
-        binding.enrollProgress.visibility = View.VISIBLE
-        binding.enrollProgress.progress = 0
+    private fun startVerification(userId: Int) {
+        binding.btnStartVerify.isEnabled = false
+        updateStatus("Loading template from database...", false)
         
         lifecycleScope.launch {
             try {
-                // Create user first
-                val userResponse = ApiClient.apiService.createUser(
-                    CreateUserRequest(name, email.ifEmpty { null })
-                )
+                // Step 1: Load fingerprint template from database (middleware is just DB bridge)
+                updateStatus("Loading fingerprint template from database...", false)
+                val fingerprintResponse = ApiClient.apiService.getFingerprint(userId)
                 
-                if (userResponse.isSuccessful && userResponse.body() != null) {
-                    val user = userResponse.body()!!
-                    currentEnrollmentUserId = user.id
-                    
-                    // Start fingerprint enrollment
-                    fingerprintManager.startEnrollment(
-                        user.id,
-                        onProgress = { current, total, message ->
-                            runOnUiThread {
-                                enrollmentStages = current
-                                binding.enrollProgress.max = total
-                                binding.enrollProgress.progress = current
-                                binding.enrollStatusLabel.text = message
-                            }
-                        },
-                        onComplete = { template ->
-                            runOnUiThread {
-                                // Upload template to server
-                                lifecycleScope.launch {
-                                    enrollFingerprintTemplate(user.id, template)
-                                }
-                            }
-                        },
-                        onError = { error ->
-                            runOnUiThread {
-                                enrollmentInProgress = false
-                                binding.btnStartEnroll.isEnabled = true
-                                binding.enrollProgress.visibility = View.GONE
-                                updateStatus("Enrollment error: $error", true)
-                            }
-                        }
-                    )
-                } else {
-                    throw IOException("Failed to create user: ${userResponse.message()}")
-                }
-            } catch (e: Exception) {
-                enrollmentInProgress = false
-                binding.btnStartEnroll.isEnabled = true
-                binding.enrollProgress.visibility = View.GONE
-                updateStatus("Error: ${e.message}", true)
-            }
-        }
-    }
-    
-    private suspend fun enrollFingerprintTemplate(userId: Int, template: ByteArray) {
-        try {
-            val base64Template = Base64.encodeToString(template, Base64.NO_WRAP)
-            val response = ApiClient.apiService.enrollFingerprint(
-                userId,
-                EnrollFingerprintRequest(base64Template)
-            )
-            
-            runOnUiThread {
-                enrollmentInProgress = false
-                binding.btnStartEnroll.isEnabled = true
-                binding.enrollProgress.visibility = View.GONE
-                
-                if (response.isSuccessful) {
-                    updateStatus("Enrollment completed successfully!", false)
-                    binding.editEnrollName.text?.clear()
-                    binding.editEnrollEmail.text?.clear()
-                    loadUsers()
-                } else {
-                    updateStatus("Failed to save fingerprint template", true)
-                }
-            }
-        } catch (e: Exception) {
-            runOnUiThread {
-                enrollmentInProgress = false
-                binding.btnStartEnroll.isEnabled = true
-                binding.enrollProgress.visibility = View.GONE
-                updateStatus("Error uploading template: ${e.message}", true)
-            }
-        }
-    }
-    
-    private fun startVerification() {
-        val userId = selectedUserId
-        if (userId == null || userId <= 0) {
-            Toast.makeText(this, "Please select a user first", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        if (!isInitialized) {
-            Toast.makeText(this, "Please initialize reader first", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        binding.btnStartVerify.isEnabled = false
-        updateStatus("Place your finger on the sensor...", false)
-        
-        lifecycleScope.launch {
-            val (matched, score) = fingerprintManager.verifyFingerprint(userId)
-            
-            runOnUiThread {
-                binding.btnStartVerify.isEnabled = true
-                if (matched) {
-                    updateStatus("Verification successful! Score: $score", false)
-                    binding.verifyResultLabel.text = "MATCH - Score: $score"
-                } else {
-                    updateStatus("Verification failed - No match", true)
-                    binding.verifyResultLabel.text = "NO MATCH"
-                }
-            }
-        }
-    }
-    
-    private fun startIdentification() {
-        if (!isInitialized) {
-            Toast.makeText(this, "Please initialize reader first", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        binding.btnIdentify.isEnabled = false
-        updateStatus("Identifying... Place finger on sensor", false)
-        
-        lifecycleScope.launch {
-            // Get all user IDs first
-            val usersResponse = ApiClient.apiService.listUsers()
-            
-            if (usersResponse.isSuccessful && usersResponse.body() != null) {
-                val userIds = usersResponse.body()!!
-                    .filter { it.hasFingerprint }
-                    .map { it.id }
-                
-                if (userIds.isEmpty()) {
+                if (!fingerprintResponse.isSuccessful || fingerprintResponse.body() == null) {
                     runOnUiThread {
-                        binding.btnIdentify.isEnabled = true
-                        updateStatus("No enrolled users found", true)
+                        binding.btnStartVerify.isEnabled = true
+                        binding.verifyResultLabel.visibility = View.VISIBLE
+                        binding.verifyResultLabel.text = "NO TEMPLATE"
+                        binding.verifyResultLabel.setBackgroundColor(getColor(android.R.color.holo_orange_light))
+                        updateStatus("User has no fingerprint template. Please enroll first.", true)
                     }
                     return@launch
                 }
                 
-                val (matchedUserId, score) = fingerprintManager.identifyUser(userIds)
+                val storedTemplateHex = fingerprintResponse.body()!!.template
+                val storedTemplate = hexStringToByteArray(storedTemplateHex)
+                
+                // Step 2: Capture fingerprint image using libfprint
+                updateStatus("Capturing fingerprint using libfprint...", false)
+                val imageData = fingerprintManager.captureFingerprintTemplate()
+                
+                if (imageData == null || imageData.isEmpty()) {
+                    runOnUiThread {
+                        binding.btnStartVerify.isEnabled = true
+                        binding.verifyResultLabel.visibility = View.VISIBLE
+                        binding.verifyResultLabel.text = "CAPTURE FAILED"
+                        binding.verifyResultLabel.setBackgroundColor(getColor(android.R.color.holo_red_light))
+                        updateStatus("Failed to capture fingerprint", true)
+                    }
+                    return@launch
+                }
+                
+                // Step 3: Match locally using libfprint (like Qt does)
+                updateStatus("Matching locally using libfprint...", false)
+                val (matched, score) = fingerprintManager.verifyFingerprint(storedTemplate)
+                
+                runOnUiThread {
+                    binding.btnStartVerify.isEnabled = true
+                    binding.verifyResultLabel.visibility = View.VISIBLE
+                    
+                    if (matched && score >= 60) {
+                        binding.verifyResultLabel.text = "✓ MATCH - Score: $score%"
+                        binding.verifyResultLabel.setBackgroundColor(getColor(android.R.color.holo_green_light))
+                        updateStatus("Verification successful! User ID: $userId", false)
+                    } else {
+                        binding.verifyResultLabel.text = "✗ NO MATCH"
+                        binding.verifyResultLabel.setBackgroundColor(getColor(android.R.color.holo_red_light))
+                        updateStatus("Verification failed - Fingerprint does not match", true)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Verification error: ${e.message}", e)
+                runOnUiThread {
+                    binding.btnStartVerify.isEnabled = true
+                    binding.verifyResultLabel.visibility = View.VISIBLE
+                    binding.verifyResultLabel.text = "ERROR: ${e.message}"
+                    binding.verifyResultLabel.setBackgroundColor(getColor(android.R.color.holo_red_light))
+                    updateStatus("Error: ${e.message}", true)
+                }
+            }
+        }
+    }
+    
+    private fun hexStringToByteArray(hex: String): ByteArray {
+        val len = hex.length
+        val data = ByteArray(len / 2)
+        var i = 0
+        while (i < len) {
+            data[i / 2] = ((Character.digit(hex[i], 16) shl 4) + Character.digit(hex[i + 1], 16)).toByte()
+            i += 2
+        }
+        return data
+    }
+    
+    private fun startIdentification() {
+        if (!isInitialized) {
+            Toast.makeText(this, "Please initialize fingerprint reader first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        binding.btnIdentify.isEnabled = false
+        updateStatus("Loading users from database...", false)
+        
+        lifecycleScope.launch {
+            try {
+                // Step 1: Load all users with fingerprints from database (middleware is just DB bridge)
+                updateStatus("Loading users with fingerprints from database...", false)
+                val usersResponse = ApiClient.apiService.listUsers()
+                
+                if (!usersResponse.isSuccessful || usersResponse.body() == null) {
+                    runOnUiThread {
+                        binding.btnIdentify.isEnabled = true
+                        updateStatus("Failed to load users", true)
+                        Toast.makeText(this@MainActivity, "Failed to load users", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                
+                val users = usersResponse.body()!!.filter { it.hasFingerprint }
+                
+                if (users.isEmpty()) {
+                    runOnUiThread {
+                        binding.btnIdentify.isEnabled = true
+                        updateStatus("No users with fingerprints found", true)
+                        Toast.makeText(this@MainActivity, "No users with fingerprints found", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                
+                // Step 2: Capture fingerprint image using libfprint
+                updateStatus("Capturing fingerprint using libfprint...", false)
+                val imageData = fingerprintManager.captureFingerprintTemplate()
+                
+                if (imageData == null || imageData.isEmpty()) {
+                    runOnUiThread {
+                        binding.btnIdentify.isEnabled = true
+                        updateStatus("Failed to capture fingerprint. Please try again.", true)
+                        Toast.makeText(this@MainActivity, "Failed to capture fingerprint", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                
+                Log.d("MainActivity", "Captured fingerprint image: ${imageData.size} bytes for identification")
+                
+                // Step 3: Load all templates and match locally using libfprint (like Qt does)
+                updateStatus("Loading templates and matching locally...", false)
+                
+                // Load all templates from database
+                val userTemplates = mutableMapOf<Int, ByteArray>()
+                for (user in users) {
+                    try {
+                        val fingerprintResponse = ApiClient.apiService.getFingerprint(user.id)
+                        if (fingerprintResponse.isSuccessful && fingerprintResponse.body() != null) {
+                            val templateHex = fingerprintResponse.body()!!.template
+                            val templateData = hexStringToByteArray(templateHex)
+                            userTemplates[user.id] = templateData
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Failed to load template for user ${user.id}: ${e.message}")
+                    }
+                }
+                
+                if (userTemplates.isEmpty()) {
+                    runOnUiThread {
+                        binding.btnIdentify.isEnabled = true
+                        updateStatus("No templates found", true)
+                        Toast.makeText(this@MainActivity, "No templates found", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                
+                updateStatus("Matching locally against ${userTemplates.size} users...", false)
+                val (matchedUserId, score) = fingerprintManager.identifyUser(userTemplates)
                 
                 runOnUiThread {
                     binding.btnIdentify.isEnabled = true
-                    if (matchedUserId > 0) {
-                        updateStatus("User identified! ID: $matchedUserId, Score: $score", false)
-                        loadUsers() // Refresh to highlight matched user
+                    
+                    if (matchedUserId >= 0 && score >= 60) {
+                        updateStatus("User identified! ID: $matchedUserId, Score: $score%", false)
+                        
+                        // Show success message
+                        Toast.makeText(this@MainActivity, "User identified: ID $matchedUserId (Score: $score%)", Toast.LENGTH_LONG).show()
+                        
+                        // Select and highlight the identified user in the list
+                        selectedUserId = matchedUserId
+                        
+                        // Refresh user list to show the identified user
+                        loadUsers()
+                        
+                        // Update selected user display
+                        lifecycleScope.launch {
+                            try {
+                                val userResponse = ApiClient.apiService.getUser(matchedUserId)
+                                if (userResponse.isSuccessful && userResponse.body() != null) {
+                                    val user = userResponse.body()!!
+                                    binding.selectedUserName.text = "Selected: ${user.name}"
+                                    binding.btnDeleteUser.isEnabled = true
+                                }
+                            } catch (e: Exception) {
+                                Log.e("MainActivity", "Failed to get user info: ${e.message}")
+                            }
+                        }
                     } else {
                         updateStatus("No matching user found", true)
+                        Toast.makeText(this@MainActivity, "No matching user found.", Toast.LENGTH_LONG).show()
                     }
                 }
-            } else {
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Identification error: ${e.message}", e)
                 runOnUiThread {
                     binding.btnIdentify.isEnabled = true
-                    updateStatus("Failed to load users", true)
+                    updateStatus("Error: ${e.message}", true)
+                    Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -350,7 +377,6 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun enableControls(enabled: Boolean) {
-        binding.btnStartEnroll.isEnabled = enabled
         binding.btnStartVerify.isEnabled = enabled
         binding.btnIdentify.isEnabled = enabled
     }

@@ -40,6 +40,16 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
+        // Add fingerprint_image column if it doesn't exist (migration)
+        sqlx::query(
+            r#"
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS fingerprint_image BYTEA
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .ok(); // Ignore error if column already exists
+
         // Create index on email for faster lookups
         sqlx::query(
             r#"

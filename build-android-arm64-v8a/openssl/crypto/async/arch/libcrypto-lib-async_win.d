@@ -1,0 +1,15 @@
+crypto/async/arch/libcrypto-lib-async_win.o: \
+  crypto/async/arch/async_win.c crypto/async/arch/../async_local.h \
+  include/crypto/async.h include/openssl/async.h \
+  /Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/sources/android/support/include/stdlib.h \
+  include/openssl/macros.h include/openssl/opensslconf.h \
+  include/openssl/configuration.h include/openssl/opensslv.h \
+  include/openssl/asyncerr.h include/openssl/symhacks.h \
+  include/openssl/e_os2.h \
+  /Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/sources/android/support/include/inttypes.h \
+  include/openssl/cryptoerr_legacy.h include/openssl/crypto.h \
+  include/openssl/safestack.h include/openssl/stack.h \
+  include/openssl/types.h include/openssl/cryptoerr.h \
+  include/openssl/core.h crypto/async/arch/../arch/async_win.h \
+  crypto/async/arch/../arch/async_posix.h \
+  crypto/async/arch/../arch/async_null.h

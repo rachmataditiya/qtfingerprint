@@ -25,15 +25,15 @@ data class CreateUserRequest(
 )
 
 data class EnrollFingerprintRequest(
-    val template: String // Base64 encoded
+    val template: String // Hex encoded (not Base64)
 )
 
 data class VerifyFingerprintRequest(
-    val template: String // Base64 encoded
+    val template: String // Hex encoded (not Base64)
 )
 
 data class IdentifyFingerprintRequest(
-    val template: String // Base64 encoded
+    val template: String // Hex encoded (not Base64)
 )
 
 data class VerifyResponse(

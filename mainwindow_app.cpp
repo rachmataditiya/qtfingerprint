@@ -576,8 +576,18 @@ void MainWindowApp::processEnrollmentResult(int result)
         
         log(QString("Template created, size: %1 bytes").arg(templateData.size()));
         
+        // Capture raw image for image-based matching (compatible with Android)
+        QByteArray imageData;
+        bool imageCaptured = m_fpManager->captureRawImage(imageData);
+        if (imageCaptured) {
+            log(QString("Raw image captured, size: %1 bytes").arg(imageData.size()));
+        } else {
+            log(QString("Warning: Failed to capture raw image: %1").arg(m_fpManager->getLastError()));
+            log("Enrollment will continue without raw image (FP3 template only)");
+        }
+        
         int userId;
-        if (!m_dbManager->addUser(m_enrollmentUserName, m_enrollmentUserEmail, templateData, userId)) {
+        if (!m_dbManager->addUser(m_enrollmentUserName, m_enrollmentUserEmail, templateData, imageData, userId)) {
             QMessageBox::critical(this, "Database Error", 
                 QString("Failed to save user:\n%1").arg(m_dbManager->getLastError()));
             log(QString("❌ Database error: %1").arg(m_dbManager->getLastError()));

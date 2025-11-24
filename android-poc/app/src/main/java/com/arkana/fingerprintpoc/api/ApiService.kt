@@ -30,13 +30,8 @@ interface ApiService {
     @GET("users/{id}/fingerprint")
     suspend fun getFingerprint(@Path("id") id: Int): Response<FingerprintResponse>
     
-    @POST("users/{id}/verify")
-    suspend fun verifyFingerprint(
-        @Path("id") userId: Int,
-        @Body request: VerifyFingerprintRequest
-    ): Response<VerifyResponse>
-    
-    @POST("identify")
-    suspend fun identifyUser(@Body request: IdentifyFingerprintRequest): Response<IdentifyResponse>
+    // Removed: verifyFingerprint and identifyUser endpoints
+    // Matching is now done locally on Android using libfprint, just like Qt application
+    // Middleware only provides CRUD operations for database
 }
 

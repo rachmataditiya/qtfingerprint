@@ -8,7 +8,10 @@
 
     <!-- Biometric permission -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-    <uses-feature android:name="android.hardware.fingerprint" android:required="true" />
+    <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
+    
+    <!-- USB Host permission for external fingerprint reader -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="true" />
 
     <application
         android:allowBackup="true"
@@ -28,6 +31,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            
+            <!-- USB Device filter for DigitalPersona U.are.U 4000 -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
         </activity>
 
     </application>
