@@ -11,6 +11,7 @@
 #include <QGridLayout>
 #include <QRadialGradient>
 #include <QtConcurrent>
+#include <QTimer>
 
 MainWindowApp::MainWindowApp(QWidget *parent)
     : QMainWindow(parent)
@@ -640,9 +641,10 @@ void MainWindowApp::onVerifyClicked()
     m_verifyScoreLabel->setText("Please wait...");
     log(QString("Verification started for user ID: %1").arg(m_verificationUserId));
     
-    // First, get user's fingers to know which finger to use
-    // If no fingers available, use empty string to get most recent
-    m_backendClient->getUserFingers(m_verificationUserId);
+    // Load template directly with empty finger (most recent) to avoid getting stuck
+    // Backend will return the most recent template if finger is empty
+    log("Loading most recent template...");
+    m_backendClient->loadTemplate(m_verificationUserId, ""); // Empty = most recent
 }
 
 void MainWindowApp::onCaptureVerifySample()
@@ -823,6 +825,11 @@ void MainWindowApp::onUserFingersRetrieved(int userId, const QStringList& finger
         // Empty string will get the most recent template from backend
         QString finger = fingers.first(); // Use first available finger
         log(QString("Loading template for finger: %1").arg(finger));
+        m_verifyResultLabel->setText(QString("Loading template for %1...").arg(finger));
+        
+        // Update status to show we're loading template (not stuck)
+        QApplication::processEvents();
+        
         m_backendClient->loadTemplate(m_verificationUserId, finger);
     }
 }

@@ -302,8 +302,35 @@ void BackendClient::handleUserRetrieved(QNetworkReply* reply)
 
 void BackendClient::handleUserFingersRetrieved(QNetworkReply* reply)
 {
+    if (reply->error() != QNetworkReply::NoError) {
+        // Extract userId from URL before emitting error
+        QString path = reply->url().path();
+        int userId = path.section('/', -2, -2).toInt();
+        
+        emit error(QString("Failed to get user fingers: %1").arg(reply->errorString()));
+        qDebug() << "BackendClient: Error getting user fingers:" << reply->errorString();
+        
+        // Emit empty list so UI can handle it
+        emit userFingersRetrieved(userId, QStringList());
+        return;
+    }
+
     QByteArray data = reply->readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    
+    if (parseError.error != QJsonParseError::NoError) {
+        QString path = reply->url().path();
+        int userId = path.section('/', -2, -2).toInt();
+        
+        emit error(QString("JSON parse error: %1").arg(parseError.errorString()));
+        qDebug() << "BackendClient: JSON parse error:" << parseError.errorString();
+        
+        // Emit empty list so UI can handle it
+        emit userFingersRetrieved(userId, QStringList());
+        return;
+    }
+    
     QJsonArray array = doc.array();
 
     QStringList fingers;
