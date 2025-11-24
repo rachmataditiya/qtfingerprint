@@ -1,6 +1,6 @@
 QT += core gui widgets concurrent network
 
-CONFIG += c++17
+CONFIG += c++17 sdk_no_version_check
 
 TARGET = FingerprintApp
 TEMPLATE = app
@@ -50,9 +50,9 @@ macx {
                        install_name_tool -change /opt/homebrew/opt/qtbase/lib/QtCore.framework/Versions/A/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/A/QtCore $$EXECUTABLE_PATH && \
                        install_name_tool -change /opt/homebrew/opt/qtbase/lib/QtNetwork.framework/Versions/A/QtNetwork @executable_path/../Frameworks/QtNetwork.framework/Versions/A/QtNetwork $$EXECUTABLE_PATH && \
                        install_name_tool -change /opt/homebrew/opt/qtbase/lib/QtConcurrent.framework/Versions/A/QtConcurrent @executable_path/../Frameworks/QtConcurrent.framework/Versions/A/QtConcurrent $$EXECUTABLE_PATH && \
-                       find $$FRAMEWORKS_DIR -name "*.framework" -type d -exec codesign --force --sign - --entitlements $$PWD/entitlements.plist {}/Versions/A/* \; 2>&1 | grep -v "replacing existing signature" ; true && \
-                       codesign --force --sign - --entitlements $$PWD/entitlements.plist $$EXECUTABLE_PATH 2>&1 | grep -v "replacing existing signature" ; true && \
-                       codesign --force --sign - --entitlements $$PWD/entitlements.plist $$APP_BUNDLE_DIR 2>&1 | grep -v "replacing existing signature" ; true
+                       find $$FRAMEWORKS_DIR -name "*.framework" -type d -exec codesign --force --sign - --entitlements $$PWD/entitlements.plist {}/Versions/A/* \; 2>&1 | sed \"s/replacing existing signature//g\" || true && \
+                       codesign --force --sign - --entitlements $$PWD/entitlements.plist $$EXECUTABLE_PATH 2>&1 | sed \"s/replacing existing signature//g\" || true && \
+                       codesign --force --sign - --entitlements $$PWD/entitlements.plist $$APP_BUNDLE_DIR 2>&1 | sed \"s/replacing existing signature//g\" || true
 }
 
 # Libfprint Dependencies (Homebrew on macOS)
