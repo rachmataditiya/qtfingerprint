@@ -1,0 +1,19 @@
+[binaries]
+c = '/Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android29-clang'
+cpp = '/Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android29-clang++'
+ar = '/Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-ar'
+strip = '/Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip'
+pkgconfig = 'pkg-config'
+exe_wrapper = '/Users/rachmataditiya/Projects/uareu/android_exe_wrapper.sh'
+
+[built-in options]
+c_args = ['-DANDROID', '-fPIC', '-ffunction-sections', '-funwind-tables', '-fstack-protector-strong', '-fno-addrsig', '--sysroot=/Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/sysroot', '-I/Users/rachmataditiya/Projects/uareu/android-ndk-prefix/include']
+cpp_args = ['-DANDROID', '-fPIC', '-ffunction-sections', '-funwind-tables', '-fstack-protector-strong', '-fno-addrsig', '--sysroot=/Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/sysroot', '-I/Users/rachmataditiya/Projects/uareu/android-ndk-prefix/include', '-std=c++17']
+c_link_args = ['--sysroot=/Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/sysroot', '-L/Users/rachmataditiya/Projects/uareu/android-ndk-prefix/lib', '-Wl,--gc-sections', '-Wl,--build-id', '-Wl,--no-undefined', '-Wl,-z,noexecstack', '-Wl,-z,relro', '-Wl,-z,now', '-landroid']
+cpp_link_args = ['--sysroot=/Users/rachmataditiya/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/sysroot', '-L/Users/rachmataditiya/Projects/uareu/android-ndk-prefix/lib', '-Wl,--gc-sections', '-Wl,--build-id', '-Wl,--no-undefined', '-Wl,-z,noexecstack', '-Wl,-z,relro', '-Wl,-z,now', '-landroid']
+
+[host_machine]
+system = 'android'
+cpu_family = 'aarch64'
+cpu = 'aarch64'
+endian = 'little'

@@ -11,7 +11,12 @@ DESTDIR = bin
 # Link to digitalpersonalib (Binary)
 INCLUDEPATH += $$PWD/digitalpersonalib/include
 
-LIBS += -L$$PWD/digitalpersonalib/lib -ldigitalpersona
+# Android: use architecture-specific library name
+android {
+    LIBS += -L$$PWD/digitalpersonalib/lib -ldigitalpersona_arm64-v8a
+} else {
+    LIBS += -L$$PWD/digitalpersonalib/lib -ldigitalpersona
+}
 QMAKE_RPATHDIR += $$PWD/digitalpersonalib/lib
 
 # Deploy library with app
@@ -60,7 +65,7 @@ macx {
             -lgusb -lusb-1.0 -lpixman-1 -lcairo -ljson-glib-1.0 -lintl
 }
 
-unix:!macx {
+unix:!macx:!android {
     CONFIG += link_pkgconfig
     # Only libfprint-2 is usually needed, it pulls other deps automatically.
     # We include glib-2.0 because we use GMainLoop/GError in our code.
@@ -69,6 +74,54 @@ unix:!macx {
     # Ensure custom library can be found at runtime
     QMAKE_LFLAGS += -Wl,-rpath,\'\$$ORIGIN/../digitalpersonalib/lib\'
     QMAKE_LFLAGS += -Wl,-rpath,\'\$$ORIGIN/lib\'
+}
+
+# Android settings
+android {
+    # Android NDK prefix (where libfprint was built)
+    ANDROID_PREFIX = $$PWD/android-ndk-prefix
+    
+    # Link to libfprint and dependencies for Android
+    INCLUDEPATH += $$ANDROID_PREFIX/include \
+                   $$ANDROID_PREFIX/include/libfprint-2 \
+                   $$ANDROID_PREFIX/include/glib-2.0 \
+                   $$ANDROID_PREFIX/lib/glib-2.0/include \
+                   $$ANDROID_PREFIX/include/gusb-1 \
+                   $$ANDROID_PREFIX/include/libusb-1.0 \
+                   $$ANDROID_PREFIX/include/json-glib-1.0
+    
+    LIBS += -L$$ANDROID_PREFIX/lib \
+            -lfprint-2 \
+            -lglib-2.0 \
+            -lgobject-2.0 \
+            -lgio-2.0 \
+            -lgusb \
+            -lusb-1.0 \
+            -ljson-glib-1.0 \
+            -lffi \
+            -lssl \
+            -lcrypto
+    
+    # Copy native libraries to Android package
+    ANDROID_EXTRA_LIBS = $$ANDROID_PREFIX/lib/libfprint-2.so \
+                         $$ANDROID_PREFIX/lib/libglib-2.0.so \
+                         $$ANDROID_PREFIX/lib/libgobject-2.0.so \
+                         $$ANDROID_PREFIX/lib/libgio-2.0.so \
+                         $$ANDROID_PREFIX/lib/libgusb.so \
+                         $$ANDROID_PREFIX/lib/libusb-1.0.so \
+                         $$ANDROID_PREFIX/lib/libjson-glib-1.0.so \
+                         $$ANDROID_PREFIX/lib/libffi.so \
+                         $$ANDROID_PREFIX/lib/libssl.so \
+                         $$ANDROID_PREFIX/lib/libcrypto.so \
+                         $$PWD/digitalpersonalib/lib/libdigitalpersona.so
+    
+    # Android deployment settings
+    ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android
+    ANDROID_MIN_SDK_VERSION = 28
+    ANDROID_TARGET_SDK_VERSION = 36
+    
+    # Permissions for USB access
+    ANDROID_MANIFEST_PERMISSIONS += android.permission.USB_PERMISSION
 }
 
 
