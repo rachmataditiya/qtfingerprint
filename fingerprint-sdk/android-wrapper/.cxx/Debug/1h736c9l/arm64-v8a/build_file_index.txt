@@ -1,1 +1,0 @@
-/Users/rachmataditiya/Projects/uareu/fingerprint-sdk/android-wrapper/src/main/cpp/CMakeLists.txt

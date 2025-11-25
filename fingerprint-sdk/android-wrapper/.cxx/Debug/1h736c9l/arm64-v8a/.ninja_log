@@ -1,4 +1,0 @@
-# ninja log v5
-0	372	1763981267403443356	CMakeFiles/arkana_fprint.dir/Users/rachmataditiya/Projects/uareu/libdigitalpersona/app/src/main/cpp/fingerprint_capture.cpp.o	360b14618ce6887
-1	329	1763981309560636315	CMakeFiles/arkana_fprint.dir/arkana_fprint.cpp.o	22a18f194c00bb9b
-329	590	1763981309673747789	/Users/rachmataditiya/Projects/uareu/fingerprint-sdk/android-wrapper/build/intermediates/cxx/Debug/1h736c9l/obj/arm64-v8a/libarkana_fprint.so	203a78dafd506ea8

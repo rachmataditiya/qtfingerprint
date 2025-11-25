@@ -4,3 +4,6 @@
 [submodule "libfprint_repo"]
 	path = libfprint_repo
 	url = https://github.com/rachmataditiya/libfprint-mac
+[submodule "fingerprint-sdk"]
+	path = fingerprint-sdk
+	url = https://github.com/rachmataditiya/fingerprint-sdk.git
