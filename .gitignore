@@ -62,6 +62,7 @@ debug/
 release/
 x64/
 x86/
+ios-deps-prefix/
 
 # Generated documentation
 doc/html/
